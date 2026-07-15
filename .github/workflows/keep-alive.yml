@@ -1,0 +1,33 @@
+name: keep-alive
+
+# Supabase pauses a free project after ~7 days with no activity. One cheap
+# request a day keeps it awake. Needs two repo secrets (Settings → Secrets →
+# Actions): SUPABASE_URL and SUPABASE_ANON_KEY.
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # every day at 06:17 UTC
+  workflow_dispatch: {} # lets you run it by hand from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST endpoint
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "Missing SUPABASE_URL or SUPABASE_ANON_KEY secret."
+            exit 1
+          fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/" \
+            -H "apikey: $SUPABASE_ANON_KEY")
+          echo "HTTP $code"
+          # Any 2xx/3xx means the project answered and is now awake.
+          case "$code" in
+            2*|3*) echo "Awake." ;;
+            *) echo "Unexpected status"; exit 1 ;;
+          esac

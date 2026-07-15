@@ -1,8 +1,8 @@
 name: keep-alive
 
 # Supabase pauses a free project after ~7 days with no activity. One cheap
-# request a day keeps it awake. Needs two repo secrets (Settings → Secrets →
-# Actions): SUPABASE_URL and SUPABASE_ANON_KEY.
+# request a day keeps it awake. Needs repo secret SUPABASE_URL
+# (Settings → Secrets → Actions).
 
 on:
   schedule:
@@ -13,19 +13,16 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase REST endpoint
+      - name: Ping Supabase health endpoint
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "Missing SUPABASE_URL or SUPABASE_ANON_KEY secret."
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "Missing SUPABASE_URL secret."
             exit 1
           fi
           code=$(curl -s -o /dev/null -w "%{http_code}" \
-            "$SUPABASE_URL/rest/v1/" \
-            -H "apikey: $SUPABASE_ANON_KEY" \
-            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+            "$SUPABASE_URL/auth/v1/health")
           echo "HTTP $code"
           # Any 2xx/3xx means the project answered and is now awake.
           case "$code" in

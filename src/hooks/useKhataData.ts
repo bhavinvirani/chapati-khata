@@ -147,7 +147,7 @@ export function useKhataData(onBooted: () => void) {
   const historyLoaded = historyLoadedRef.current;
 
   return {
-    weeks, entries, logs,
+    weeks, entries, allEntries, logs,
     loading, offline, checking,
     load, markOffline,
     hasMoreLogs, loadingMore, loadMoreLogs,

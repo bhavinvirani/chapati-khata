@@ -46,7 +46,7 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
   return (
     <section className="add">
       <div className="add-head">
-        <span className="eyebrow">Add entry &middot; {money(DEFAULT_PRICE)}/ea</span>
+        <span className="eyebrow">Add entry</span>
         <div className="add-date-wrap">
           <input
             type="date"
@@ -94,11 +94,15 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
         aria-label="Optional note"
       />
       {addErr && <div className="add-err">{addErr}</div>}
-      {existingEntry && !addErr && (
-        <div className="add-hint">
-          {isToday ? "Today" : dayLabel(selectedDate)} so far &middot; <b>{existingEntry.qty}</b> chapati
-          {existingEntry.qty !== 1 ? "s" : ""} &middot; {money(existingEntry.amount)}
-        </div>
+      {!addErr && (
+        existingEntry ? (
+          <div className="add-hint">
+            {isToday ? "Today" : dayLabel(selectedDate)} so far &middot; <b>{existingEntry.qty}</b> chapati
+            {existingEntry.qty !== 1 ? "s" : ""} &middot; {money(existingEntry.amount)}
+          </div>
+        ) : (
+          <div className="add-rate">{money(DEFAULT_PRICE)} per chapati</div>
+        )
       )}
     </section>
   );

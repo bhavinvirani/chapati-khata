@@ -21,6 +21,7 @@ import { PaidHistory } from "./components/PaidHistory";
 import { EditSheet } from "./components/EditSheet";
 import { LogView } from "./components/LogView";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { StatsSheet } from "./components/StatsSheet";
 import { Toast } from "./components/Toast";
 import { Roti } from "./components/icons";
 
@@ -29,7 +30,7 @@ const ENTRY_CODE = import.meta.env.VITE_ENTRY_CODE as string | undefined;
 export default function App() {
   const { user, signIn, signOut, restoreUser } = useAuth();
   const {
-    weeks, entries, logs,
+    weeks, entries, allEntries, logs,
     loading, offline, checking,
     load, markOffline,
     hasMoreLogs, loadingMore, loadMoreLogs,
@@ -42,6 +43,7 @@ export default function App() {
   const [tab, setTab] = useState<"ledger" | "log">("ledger");
   const [editing, setEditing] = useState<Entry | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const device = useMemo(() => getDeviceId(), []);
 
@@ -261,7 +263,19 @@ export default function App() {
                 />
               </>
             )}
-            <div className="foot">Shared tab &middot; {unpaid.length} open{paidCount > 0 ? ` \u00b7 ${paidCount} paid` : ""}</div>
+            <div className="foot">
+              {unpaid.length} open{paidCount > 0 ? ` \u00b7 ${paidCount} paid` : ""}
+              {" \u00b7 "}
+              <button
+                className="foot-link"
+                onClick={async () => {
+                  if (!historyLoaded) await loadHistory();
+                  setShowStats(true);
+                }}
+              >
+                Stats
+              </button>
+            </div>
           </main>
         ) : (
           <LogView logs={logs} hasMore={hasMoreLogs} loadingMore={loadingMore} onLoadMore={loadMoreLogs} />
@@ -279,6 +293,8 @@ export default function App() {
       )}
 
       {confirm && <ConfirmDialog confirm={confirm} busy={busy} onClose={clearConfirm} />}
+
+      {showStats && <StatsSheet entries={allEntries} onClose={() => setShowStats(false)} />}
 
       {toast && <Toast message={toast} />}
     </div>

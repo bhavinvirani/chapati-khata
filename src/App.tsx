@@ -17,6 +17,7 @@ import { OfflineBanner } from "./components/OfflineBanner";
 import { ToPayCard } from "./components/ToPayCard";
 import { AddForm } from "./components/AddForm";
 import { WeekCard } from "./components/WeekCard";
+import { PaidHistory } from "./components/PaidHistory";
 import { EditSheet } from "./components/EditSheet";
 import { LogView } from "./components/LogView";
 import { ConfirmDialog } from "./components/ConfirmDialog";
@@ -32,7 +33,8 @@ export default function App() {
     loading, offline, checking,
     load, markOffline,
     hasMoreLogs, loadingMore, loadMoreLogs,
-    shown, unpaid, owed, owedQty,
+    loadingHistory, historyLoaded, loadHistory,
+    shown, unpaid, paid, paidCount, owed, owedQty,
   } = useKhataData(restoreUser);
   const { toast, flash } = useToast();
   const { confirm, setConfirm, clearConfirm } = useConfirm();
@@ -209,38 +211,51 @@ export default function App() {
             {shown.length === 0 ? (
               <div className="empty">
                 <Roti size={40} />
-                <p>No orders yet.</p>
+                <p>No records yet.</p>
                 <span>Add today's chapatis above and the week will appear here.</span>
               </div>
             ) : (
-              shown.map((w) => (
-                <WeekCard
-                  key={w.week_start}
-                  w={w}
+              <>
+                {unpaid.map((w) => (
+                  <WeekCard
+                    key={w.week_start}
+                    w={w}
+                    busy={busy}
+                    onEntry={(entry) => setEditing(entry)}
+                    onPay={() =>
+                      setConfirm({
+                        title: "Mark this week paid?",
+                        body: "Entries will be locked. You can reopen it later if needed.",
+                        cta: "Mark paid",
+                        tone: "go",
+                        onYes: () => handleMarkPaid(w.week_start, true),
+                      })
+                    }
+                    onReopen={() => {}}
+                  />
+                ))}
+
+                <PaidHistory
+                  paidCount={paidCount}
+                  historyLoaded={historyLoaded}
+                  loadingHistory={loadingHistory}
+                  paid={paid}
                   busy={busy}
+                  onExpand={loadHistory}
                   onEntry={(entry) => setEditing(entry)}
-                  onPay={() =>
-                    setConfirm({
-                      title: "Mark this week paid?",
-                      body: "Entries will be locked. You can reopen it later if needed.",
-                      cta: "Mark paid",
-                      tone: "go",
-                      onYes: () => handleMarkPaid(w.week_start, true),
-                    })
-                  }
-                  onReopen={() =>
+                  onReopen={(weekId) =>
                     setConfirm({
                       title: "Reopen this week?",
                       body: "It will go back to unpaid so entries can be edited. It re-joins your total.",
                       cta: "Reopen",
                       tone: "plain",
-                      onYes: () => handleMarkPaid(w.week_start, false),
+                      onYes: () => handleMarkPaid(weekId, false),
                     })
                   }
                 />
-              ))
+              </>
             )}
-            <div className="foot">Shared tab &middot; {shown.length} week{shown.length !== 1 ? "s" : ""} on record</div>
+            <div className="foot">Shared tab &middot; {unpaid.length} open{paidCount > 0 ? ` \u00b7 ${paidCount} paid` : ""}</div>
           </main>
         ) : (
           <LogView logs={logs} hasMore={hasMoreLogs} loadingMore={loadingMore} onLoadMore={loadMoreLogs} />

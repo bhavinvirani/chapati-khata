@@ -45,20 +45,37 @@ async function logAction(row: {
 // ── reads ──
 export const LOG_PAGE = 20;
 
-export async function loadAll(): Promise<{ weeks: Week[]; entries: Entry[]; logs: LogRow[] }> {
-  const [w, e, l] = await Promise.all([
-    supabase.from("weeks").select("*"),
-    supabase.from("entries").select("*"),
-    supabase.from("logs").select("*").order("ts", { ascending: false }).limit(LOG_PAGE),
-  ]);
+/** Fetch all weeks (tiny), only unpaid entries, and first page of logs. */
+export async function loadActive(): Promise<{ weeks: Week[]; entries: Entry[]; logs: LogRow[] }> {
+  // Always fetch all weeks — they're small (one row per calendar week).
+  const w = await supabase.from("weeks").select("*");
   if (w.error) fail("load weeks", w.error);
-  if (e.error) fail("load entries", e.error);
+  const weeks = (w.data ?? []) as Week[];
+
+  // Fetch entries only for unpaid weeks.
+  const unpaidIds = weeks.filter((wk) => !wk.paid).map((wk) => wk.week_start);
+  let entries: Entry[] = [];
+  if (unpaidIds.length > 0) {
+    const e = await supabase.from("entries").select("*").in("week_start", unpaidIds);
+    if (e.error) fail("load entries", e.error);
+    entries = (e.data ?? []) as Entry[];
+  }
+
+  const l = await supabase.from("logs").select("*").order("ts", { ascending: false }).limit(LOG_PAGE);
   if (l.error) fail("load logs", l.error);
-  return {
-    weeks: (w.data ?? []) as Week[],
-    entries: (e.data ?? []) as Entry[],
-    logs: (l.data ?? []) as LogRow[],
-  };
+
+  return { weeks, entries, logs: (l.data ?? []) as LogRow[] };
+}
+
+/** Fetch entries for paid weeks (called on demand when history is expanded). */
+export async function loadPaidEntries(paidWeekIds: string[]): Promise<Entry[]> {
+  if (paidWeekIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("entries")
+    .select("*")
+    .in("week_start", paidWeekIds);
+  if (error) fail("loadPaidEntries", error);
+  return (data ?? []) as Entry[];
 }
 
 /** Load older logs using composite cursor (ts + id) to handle duplicate timestamps. */

@@ -24,6 +24,8 @@ async function logAction(row: {
   day?: string | null;
   qty_before?: number | null;
   qty_after?: number | null;
+  note_before?: string | null;
+  note_after?: string | null;
   device_id?: string | null;
 }): Promise<void> {
   const { error } = await supabase.from("logs").insert({
@@ -33,6 +35,8 @@ async function logAction(row: {
     day: row.day ?? null,
     qty_before: row.qty_before ?? null,
     qty_after: row.qty_after ?? null,
+    note_before: row.note_before ?? null,
+    note_after: row.note_after ?? null,
     device_id: row.device_id ?? null,
   });
   if (error) fail("logAction", error);
@@ -120,7 +124,14 @@ export async function addToday(
     const note = [existing.note, enrichedNote].filter(Boolean).join("; ").trim();
     const { error } = await supabase.from("entries").update({ qty, amount, note }).eq("id", existing.id);
     if (error) fail("addToday/update", error);
-    await logAction({ actor, action: "add", week_start: weekId, day, qty_before: existing.qty, qty_after: qty, device_id: deviceId });
+    const noteChanged = existing.note !== note;
+    await logAction({
+      actor, action: "add", week_start: weekId, day,
+      qty_before: existing.qty, qty_after: qty,
+      note_before: noteChanged ? existing.note : null,
+      note_after: noteChanged ? note : null,
+      device_id: deviceId,
+    });
   } else {
     const { error } = await supabase
       .from("entries")
@@ -145,7 +156,18 @@ export async function editEntry(
     .update({ qty: newQty, amount, note: newNote })
     .eq("id", entry.id);
   if (error) fail("editEntry", error);
-  await logAction({ actor, action: "edit", week_start: entry.week_start, day: entry.day, qty_before: entry.qty, qty_after: newQty, device_id: deviceId });
+  const noteChanged = entry.note !== newNote;
+  await logAction({
+    actor,
+    action: "edit",
+    week_start: entry.week_start,
+    day: entry.day,
+    qty_before: entry.qty,
+    qty_after: newQty,
+    note_before: noteChanged ? entry.note : null,
+    note_after: noteChanged ? newNote : null,
+    device_id: deviceId,
+  });
 }
 
 export async function deleteEntry(entry: Entry, actor: string, deviceId: string): Promise<void> {

@@ -16,7 +16,6 @@ export function Header({ loading, userName, onExport, onRefresh, onUserClick }: 
         <Roti size={26} />
         <div>
           <div className="brand-name">Chapati Khata</div>
-          <div className="brand-sub">the roti tab</div>
         </div>
       </div>
       <div className="hdr-r">

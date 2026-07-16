@@ -169,8 +169,8 @@ export default function App() {
           onUserClick={() =>
             setConfirm({
               title: "Signed in as " + cap(user),
-              body: "Switching just changes the name recorded in the log. The tab is shared.",
-              cta: "Switch user",
+              body: "You'll need to sign in again with your name and access code.",
+              cta: "Log out",
               tone: "plain",
               onYes: handleSignOut,
             })

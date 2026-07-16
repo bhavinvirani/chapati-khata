@@ -3,15 +3,20 @@ import { Roti } from "./icons";
 import { cap, dayLabel, stamp, weekLabel } from "../lib/util";
 
 function logText(ev: LogRow): string {
+  const day = ev.day ? dayLabel(ev.day) : "a day";
   switch (ev.action) {
     case "create":
-      return `logged ${ev.qty_after} for ${ev.day ? dayLabel(ev.day) : "a day"}`;
+      return `logged ${ev.qty_after} for ${day}`;
     case "add":
-      return `added to ${ev.day ? dayLabel(ev.day) : "a day"} (${ev.qty_before} \u2192 ${ev.qty_after})`;
-    case "edit":
-      return `edited ${ev.day ? dayLabel(ev.day) : "a day"} (${ev.qty_before} \u2192 ${ev.qty_after})`;
+      return `added to ${day} (${ev.qty_before} \u2192 ${ev.qty_after})`;
+    case "edit": {
+      const qtyChanged = ev.qty_before !== ev.qty_after;
+      return qtyChanged
+        ? `edited ${day} (${ev.qty_before} \u2192 ${ev.qty_after})`
+        : `edited ${day}`;
+    }
     case "delete":
-      return `deleted ${ev.day ? dayLabel(ev.day) : "a day"} (had ${ev.qty_before})`;
+      return `deleted ${day} (had ${ev.qty_before})`;
     case "paid":
       return `marked ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"} paid`;
     case "reopen":
@@ -21,6 +26,20 @@ function logText(ev: LogRow): string {
     default:
       return ev.action;
   }
+}
+
+function NoteChange({ before, after }: { before: string; after: string }) {
+  if (!before && after) {
+    return <div className="log-note-diff">note: <span className="log-note-new">{after}</span></div>;
+  }
+  if (before && !after) {
+    return <div className="log-note-diff">note removed: <span className="log-note-old">{before}</span></div>;
+  }
+  return (
+    <div className="log-note-diff">
+      <span className="log-note-old">{before}</span> <span className="log-note-arrow">{"\u2192"}</span> <span className="log-note-new">{after}</span>
+    </div>
+  );
 }
 
 const KIND: Record<string, string> = {
@@ -64,6 +83,9 @@ export function LogView({ logs, hasMore, loadingMore, onLoadMore }: Props) {
               <div className="log-what">
                 <b className="log-actor">{cap(ev.actor)}</b> {logText(ev)}
               </div>
+              {(ev.action === "edit" || ev.action === "add") && ev.note_before != null && ev.note_after != null && (
+                <NoteChange before={ev.note_before} after={ev.note_after} />
+              )}
               <div className="log-when">{stamp(ev.ts)}</div>
             </div>
           </li>

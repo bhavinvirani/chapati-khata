@@ -34,6 +34,8 @@ create table if not exists public.logs (
   day         date,
   qty_before  integer,
   qty_after   integer,
+  note_before text,
+  note_after  text,
   device_id   text
 );
 create index if not exists logs_ts_idx on public.logs(ts desc);

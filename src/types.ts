@@ -26,6 +26,8 @@ export interface LogRow {
   day: string | null;
   qty_before: number | null;
   qty_after: number | null;
+  note_before: string | null;
+  note_after: string | null;
   device_id: string | null; // breadcrumb — not shown in the UI
 }
 

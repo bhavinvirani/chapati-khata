@@ -148,6 +148,10 @@ html, body, #root{ min-height:100%; }
 .log-actor{ color:var(--ink); }
 .log-what{ font-size:14px; line-height:1.35; }
 .log-when{ font-size:11.5px; color:var(--faint); font-family:var(--mono); margin-top:3px; }
+.log-note-diff{ font-size:12.5px; color:var(--soft); margin-top:3px; line-height:1.4; }
+.log-note-old{ text-decoration:line-through; color:var(--faint); }
+.log-note-new{ color:var(--ink); font-style:italic; }
+.log-note-arrow{ color:var(--faint); font-size:11px; }
 .log-more{ margin-top:10px; }
 
 .ovl{ position:fixed; inset:0; background:rgba(40,30,15,.42); display:flex; align-items:flex-end; justify-content:center; z-index:50; animation:fade .16s ease; backdrop-filter:blur(1.5px); }

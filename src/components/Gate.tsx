@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Roti } from "./icons";
+
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 30_000;
 
 interface Props {
   onSubmit: (name: string) => boolean;
@@ -9,14 +12,46 @@ interface Props {
 export function Gate({ onSubmit, entryCode }: Props) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [err, setErr] = useState<"name" | "code" | null>(null);
+  const [err, setErr] = useState<"name" | "code" | "locked" | null>(null);
+  const [lockUntil, setLockUntil] = useState(0);
+  const [countdown, setCountdown] = useState(0);
+  const attempts = useRef(0);
+
+  // countdown timer while locked
+  useEffect(() => {
+    if (lockUntil <= Date.now()) return;
+    const tick = () => {
+      const left = Math.ceil((lockUntil - Date.now()) / 1000);
+      if (left <= 0) {
+        setCountdown(0);
+        setErr(null);
+      } else {
+        setCountdown(left);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [lockUntil]);
+
+  const locked = countdown > 0;
 
   const go = () => {
+    if (locked) return;
     setErr(null);
     if (entryCode && code !== entryCode) {
-      setErr("code");
+      attempts.current++;
+      if (attempts.current >= MAX_ATTEMPTS) {
+        attempts.current = 0;
+        setLockUntil(Date.now() + LOCKOUT_MS);
+        setErr("locked");
+      } else {
+        setErr("code");
+      }
       return;
     }
+    // code is correct — reset attempts
+    attempts.current = 0;
     if (!onSubmit(name)) {
       setErr("name");
       return;
@@ -37,6 +72,7 @@ export function Gate({ onSubmit, entryCode }: Props) {
           value={name}
           autoFocus
           autoComplete="off"
+          disabled={locked}
           onChange={(e) => {
             setName(e.target.value);
             setErr(null);
@@ -54,7 +90,7 @@ export function Gate({ onSubmit, entryCode }: Props) {
         {entryCode && (
           <>
             <input
-              className={"in gate-in gate-code" + (err === "code" ? " bad" : "")}
+              className={"in gate-in gate-code" + (err === "code" || err === "locked" ? " bad" : "")}
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
@@ -62,6 +98,7 @@ export function Gate({ onSubmit, entryCode }: Props) {
               maxLength={4}
               placeholder="- - - -"
               value={code}
+              disabled={locked}
               onChange={(e) => {
                 setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 4));
                 setErr(null);
@@ -74,14 +111,19 @@ export function Gate({ onSubmit, entryCode }: Props) {
             {err === "code" && (
               <div className="gate-err">Wrong access code.</div>
             )}
+            {err === "locked" && (
+              <div className="gate-err">
+                Too many attempts. Try again in {countdown}s.
+              </div>
+            )}
           </>
         )}
-        <button className="btn btn-solid wide" onClick={go}>
-          Open the khata
+        <button className="btn btn-solid wide" onClick={go} disabled={locked}>
+          {locked ? `Locked (${countdown}s)` : "Open the khata"}
         </button>
       </div>
       <div className="gate-foot">
-        No password — the name is the key. Do not share this link with anyone.
+        Your name is your key — keep this link between us.
       </div>
     </div>
   );

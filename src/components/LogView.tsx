@@ -36,10 +36,11 @@ const KIND: Record<string, string> = {
 interface Props {
   logs: LogRow[];
   hasMore: boolean;
+  loadingMore: boolean;
   onLoadMore: () => void;
 }
 
-export function LogView({ logs, hasMore, onLoadMore }: Props) {
+export function LogView({ logs, hasMore, loadingMore, onLoadMore }: Props) {
   if (!logs.length) {
     return (
       <main className="scroll">
@@ -69,8 +70,8 @@ export function LogView({ logs, hasMore, onLoadMore }: Props) {
         ))}
       </ul>
       {hasMore && (
-        <button className="btn btn-ghost wide log-more" onClick={onLoadMore}>
-          Load more
+        <button className="btn btn-ghost wide log-more" onClick={onLoadMore} disabled={loadingMore}>
+          {loadingMore ? "Loading\u2026" : "Load more"}
         </button>
       )}
       <div className="foot">Make your life easy</div>

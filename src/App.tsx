@@ -30,7 +30,7 @@ export default function App() {
     weeks, entries, logs,
     loading, offline, checking,
     load, markOffline,
-    hasMoreLogs, loadMoreLogs,
+    hasMoreLogs, loadingMore, loadMoreLogs,
     shown, unpaid, owed, owedQty,
   } = useKhataData(restoreUser);
   const { toast, flash } = useToast();
@@ -207,7 +207,15 @@ export default function App() {
                   w={w}
                   busy={busy}
                   onEntry={(entry) => setEditing(entry)}
-                  onPay={() => handleMarkPaid(w.week_start, true)}
+                  onPay={() =>
+                    setConfirm({
+                      title: "Mark this week paid?",
+                      body: "Entries will be locked. You can reopen it later if needed.",
+                      cta: "Mark paid",
+                      tone: "go",
+                      onYes: () => handleMarkPaid(w.week_start, true),
+                    })
+                  }
                   onReopen={() =>
                     setConfirm({
                       title: "Reopen this week?",
@@ -223,7 +231,7 @@ export default function App() {
             <div className="foot">Shared tab &middot; {shown.length} week{shown.length !== 1 ? "s" : ""} on record</div>
           </main>
         ) : (
-          <LogView logs={logs} hasMore={hasMoreLogs} onLoadMore={loadMoreLogs} />
+          <LogView logs={logs} hasMore={hasMoreLogs} loadingMore={loadingMore} onLoadMore={loadMoreLogs} />
         )}
       </div>
 

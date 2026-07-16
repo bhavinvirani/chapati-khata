@@ -63,15 +63,20 @@ export function useKhataData(onBooted: () => void) {
     };
   }, [ready, load]);
 
+  const [loadingMore, setLoadingMore] = useState(false);
+
   async function loadMoreLogs() {
-    if (!hasMoreLogs || logs.length === 0) return;
-    const last = logs[logs.length - 1];
+    if (!hasMoreLogs || logs.length === 0 || loadingMore) return;
+    setLoadingMore(true);
     try {
+      const last = logs[logs.length - 1];
       const more = await db.loadMoreLogs(last.ts, last.id);
       if (more.length > 0) setLogs((prev) => [...prev, ...more]);
       setHasMoreLogs(more.length >= db.LOG_PAGE);
     } catch {
       // silent — user can retry
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -110,7 +115,7 @@ export function useKhataData(onBooted: () => void) {
     weeks, entries, logs,
     loading, offline, checking,
     load, markOffline,
-    hasMoreLogs, loadMoreLogs,
+    hasMoreLogs, loadingMore, loadMoreLogs,
     shown, unpaid, owed, owedQty,
   };
 }

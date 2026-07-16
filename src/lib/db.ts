@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { round2 } from "./util";
+import { round2, money } from "./util";
 import { DEFAULT_PRICE } from "../config";
 import type { Entry, LogAction, LogRow, Week } from "../types";
 
@@ -109,17 +109,22 @@ export async function addToday(
   await ensureWeek(weekId);
   const delta = round2(add.qty * add.price);
 
+  // Auto-enrich note with qty + rate when a non-default price is used
+  const isCustomRate = add.price > 0 && add.qty > 0 && round2(add.price) !== DEFAULT_PRICE;
+  const rateTag = isCustomRate ? `${add.qty} \u00d7 ${money(add.price)}/ea` : "";
+  const enrichedNote = [add.note, rateTag].filter(Boolean).join(" \u00b7 ").trim();
+
   if (existing) {
     const qty = existing.qty + add.qty;
     const amount = round2(existing.amount + delta);
-    const note = [existing.note, add.note].filter(Boolean).join("; ");
+    const note = [existing.note, enrichedNote].filter(Boolean).join("; ").trim();
     const { error } = await supabase.from("entries").update({ qty, amount, note }).eq("id", existing.id);
     if (error) fail("addToday/update", error);
     await logAction({ actor, action: "add", week_start: weekId, day, qty_before: existing.qty, qty_after: qty, device_id: deviceId });
   } else {
     const { error } = await supabase
       .from("entries")
-      .insert({ week_start: weekId, day, qty: add.qty, amount: delta, note: add.note });
+      .insert({ week_start: weekId, day, qty: add.qty, amount: delta, note: enrichedNote });
     if (error) fail("addToday/insert", error);
     await logAction({ actor, action: "create", week_start: weekId, day, qty_after: add.qty, device_id: deviceId });
   }

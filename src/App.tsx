@@ -77,7 +77,7 @@ export default function App() {
   async function handleSaveEdit(entry: Entry, qty: number, note: string) {
     if (!user) return;
     await withBusy(async () => {
-      await db.editEntry(entry, qty, note.trim().slice(0, 60), user, device);
+      await db.editEntry(entry, qty, note.trim(), user, device);
       setEditing(null);
       flash("Entry updated");
     });

@@ -43,7 +43,6 @@ export function EditSheet({ entry, busy, onClose, onSave, onDelete }: Props) {
         <input
           className="in"
           value={note}
-          maxLength={60}
           placeholder="Optional"
           onChange={(e) => setNote(e.target.value)}
           aria-label="Note"

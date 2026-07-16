@@ -11,7 +11,6 @@ export const ALLOWED_NAMES = [
   "pratik",
   "hitanshi",
   "samir",
-  "daily_ping",
 ];
 
 export const DEFAULT_PRICE = 0.5; // price per chapati at the default rate

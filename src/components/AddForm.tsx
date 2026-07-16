@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Entry, Week } from "../types";
 import type { ParsedQty } from "../lib/util";
+import { DEFAULT_PRICE } from "../config";
 import { dayLabel, money, parseQty, sanitizeQty, todayStr, weekIdOf } from "../lib/util";
 import { IcPlus } from "./icons";
 
@@ -45,7 +46,7 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
   return (
     <section className="add">
       <div className="add-head">
-        <span className="eyebrow">Add entry</span>
+        <span className="eyebrow">Add entry &middot; {money(DEFAULT_PRICE)}/ea</span>
         <div className="add-date-wrap">
           <input
             type="date"

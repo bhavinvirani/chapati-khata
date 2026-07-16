@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import type { Entry, WeekView } from "../types";
 import { WeekCard } from "./WeekCard";
 
@@ -42,16 +42,22 @@ export function PaidHistory({
           <div className="history-loading">Loading history&hellip;</div>
         ) : (
           <div className="history-weeks">
-            {paid.map((w) => (
-              <WeekCard
-                key={w.week_start}
-                w={w}
-                busy={busy}
-                onEntry={onEntry}
-                onPay={() => {}}
-                onReopen={() => onReopen(w.week_start)}
-              />
-            ))}
+            {paid.map((w, i) => {
+              const prevYear = i > 0 ? paid[i - 1].week_start.slice(0, 4) : null;
+              const year = w.week_start.slice(0, 4);
+              return (
+                <React.Fragment key={w.week_start}>
+                  {prevYear && year !== prevYear && <div className="year-sep">{year}</div>}
+                  <WeekCard
+                    w={w}
+                    busy={busy}
+                    onEntry={onEntry}
+                    onPay={() => {}}
+                    onReopen={() => onReopen(w.week_start)}
+                  />
+                </React.Fragment>
+              );
+            })}
           </div>
         )
       )}

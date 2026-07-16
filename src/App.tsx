@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { Entry } from "./types";
 import type { ParsedQty } from "./lib/util";
 import * as db from "./lib/db";
@@ -216,24 +216,30 @@ export default function App() {
               </div>
             ) : (
               <>
-                {unpaid.map((w) => (
-                  <WeekCard
-                    key={w.week_start}
-                    w={w}
-                    busy={busy}
-                    onEntry={(entry) => setEditing(entry)}
-                    onPay={() =>
-                      setConfirm({
-                        title: "Mark this week paid?",
-                        body: "Entries will be locked. You can reopen it later if needed.",
-                        cta: "Mark paid",
-                        tone: "go",
-                        onYes: () => handleMarkPaid(w.week_start, true),
-                      })
-                    }
-                    onReopen={() => {}}
-                  />
-                ))}
+                {unpaid.map((w, i) => {
+                  const prevYear = i > 0 ? unpaid[i - 1].week_start.slice(0, 4) : null;
+                  const year = w.week_start.slice(0, 4);
+                  return (
+                    <React.Fragment key={w.week_start}>
+                      {prevYear && year !== prevYear && <div className="year-sep">{year}</div>}
+                      <WeekCard
+                        w={w}
+                        busy={busy}
+                        onEntry={(entry) => setEditing(entry)}
+                        onPay={() =>
+                          setConfirm({
+                            title: "Mark this week paid?",
+                            body: "Entries will be locked. You can reopen it later if needed.",
+                            cta: "Mark paid",
+                            tone: "go",
+                            onYes: () => handleMarkPaid(w.week_start, true),
+                          })
+                        }
+                        onReopen={() => {}}
+                      />
+                    </React.Fragment>
+                  );
+                })}
 
                 <PaidHistory
                   paidCount={paidCount}

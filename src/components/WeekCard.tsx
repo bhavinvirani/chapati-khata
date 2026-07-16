@@ -12,6 +12,7 @@ interface Props {
 
 export function WeekCard({ w, busy, onEntry, onPay, onReopen }: Props) {
   const rows = [...w.entries].sort((a, b) => (a.day < b.day ? 1 : -1));
+  const showYear = w.week_start.slice(0, 4) !== String(new Date().getFullYear());
 
   return (
     <section className={"week" + (w.paid ? " paid" : "") + (isCurrentWeek(w.week_start) ? " now" : "")}>
@@ -19,7 +20,7 @@ export function WeekCard({ w, busy, onEntry, onPay, onReopen }: Props) {
       <div className="week-head">
         <div>
           <div className="week-range">
-            {weekLabel(w.week_start)}
+            {weekLabel(w.week_start, showYear)}
             {isCurrentWeek(w.week_start) && <span className="tag-now">this week</span>}
           </div>
           <div className="week-meta">

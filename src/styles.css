@@ -138,6 +138,9 @@ html, body, #root{ min-height:100%; }
 .history-weeks{ display:flex; flex-direction:column; gap:14px; margin-top:14px; }
 .history-loading{ text-align:center; padding:20px; color:var(--soft); font-size:13.5px; }
 
+.year-sep{ display:flex; align-items:center; gap:12px; color:var(--faint); font-family:var(--disp); font-weight:700; font-size:13px; letter-spacing:.04em; padding:2px 0; }
+.year-sep::before,.year-sep::after{ content:""; flex:1; border-top:1px dashed var(--line); }
+
 .empty{ text-align:center; padding:40px 20px; color:var(--soft); display:flex; flex-direction:column; align-items:center; gap:6px; }
 .empty p{ font-family:var(--disp); font-weight:700; font-size:17px; color:var(--ink); margin-top:6px; }
 .empty span{ font-size:13.5px; color:var(--faint); max-width:260px; line-height:1.5; }

@@ -18,7 +18,7 @@ export function ToPayCard({ owed, owedQty, unpaid, busy, onSettle }: Props) {
           <IcCheck className="ic" />
         </div>
         <div className="topay-amt sm">All settled</div>
-        <div className="topay-meta">Nothing owed to the lady right now.</div>
+        <div className="topay-meta">Nothing owed right now.</div>
       </section>
     );
   }

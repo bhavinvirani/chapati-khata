@@ -35,3 +35,11 @@ export interface WeekView extends Week {
   total: number;
   count: number;
 }
+
+export interface Confirm {
+  title: string;
+  body: string;
+  cta: string;
+  tone: "go" | "plain";
+  onYes: () => void;
+}

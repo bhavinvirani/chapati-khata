@@ -1,172 +1,73 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Entry, LogRow, Week, WeekView } from "./types";
-import { ALLOWED_NAMES } from "./config";
+import { useMemo, useState } from "react";
+import type { Entry } from "./types";
+import type { ParsedQty } from "./lib/util";
 import * as db from "./lib/db";
-import { ensureAuth } from "./lib/supabase";
 import { getDeviceId } from "./lib/device";
-import { cap, dayLabel, money, parseQty, round2, todayStr, weekIdOf } from "./lib/util";
-import { IcCheck, IcDownload, IcPlus, IcRefresh, IcX, Roti } from "./components/icons";
+import { cap, money, todayStr, weekIdOf } from "./lib/util";
+import { useAuth } from "./hooks/useAuth";
+import { useKhataData } from "./hooks/useKhataData";
+import { useToast } from "./hooks/useToast";
+import { useConfirm } from "./hooks/useConfirm";
+import { BootScreen } from "./components/BootScreen";
 import { Gate } from "./components/Gate";
+import { Header } from "./components/Header";
+import { TabSwitcher } from "./components/TabSwitcher";
+import { OfflineBanner } from "./components/OfflineBanner";
+import { ToPayCard } from "./components/ToPayCard";
+import { AddForm } from "./components/AddForm";
 import { WeekCard } from "./components/WeekCard";
 import { EditSheet } from "./components/EditSheet";
 import { LogView } from "./components/LogView";
-
-interface Confirm {
-  title: string;
-  body: string;
-  cta: string;
-  tone: "go" | "plain";
-  onYes: () => void;
-}
+import { ConfirmDialog } from "./components/ConfirmDialog";
+import { Toast } from "./components/Toast";
+import { Roti } from "./components/icons";
 
 export default function App() {
-  const [user, setUser] = useState<string | null>(null);
-  const [checking, setChecking] = useState(true);
-  const [ready, setReady] = useState(false);
-
-  const [weeks, setWeeks] = useState<Week[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [logs, setLogs] = useState<LogRow[]>([]);
-
-  const [loading, setLoading] = useState(false);
-  const [offline, setOffline] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const { user, signIn, signOut, restoreUser } = useAuth();
+  const {
+    weeks, entries, logs,
+    loading, offline, checking,
+    load, markOffline,
+    shown, unpaid, owed, owedQty, todayEntry, cur,
+  } = useKhataData(restoreUser);
+  const { toast, flash } = useToast();
+  const { confirm, setConfirm, clearConfirm } = useConfirm();
 
   const [tab, setTab] = useState<"ledger" | "log">("ledger");
   const [editing, setEditing] = useState<Entry | null>(null);
-  const [confirm, setConfirm] = useState<Confirm | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  const [qtyRaw, setQtyRaw] = useState("");
-  const [noteRaw, setNoteRaw] = useState("");
-  const [addErr, setAddErr] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const device = useMemo(() => getDeviceId(), []);
-  const toastTimer = useRef<number | null>(null);
-  const flash = (m: string) => {
-    setToast(m);
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 2200);
-  };
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await db.loadAll();
-      setWeeks(data.weeks);
-      setEntries(data.entries);
-      setLogs(data.logs);
-      setOffline(false);
-    } catch {
-      setOffline(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // ── action helpers ──
 
-  // auth gate + remember name + first load
-  useEffect(() => {
-    (async () => {
-      try {
-        await ensureAuth();
-        const saved = localStorage.getItem("khata.name");
-        if (saved && ALLOWED_NAMES.includes(saved)) setUser(saved);
-        setReady(true);
-        await load();
-      } catch {
-        setOffline(true);
-      } finally {
-        setChecking(false);
-      }
-    })();
-  }, [load]);
-
-  // realtime + refresh on focus (once authed)
-  useEffect(() => {
-    if (!ready) return;
-    const unsub = db.subscribeChanges(() => load());
-    const onVis = () => {
-      if (document.visibilityState === "visible") load();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      unsub();
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, [ready, load]);
-
-  // ── derived ──
-  const weekViews: WeekView[] = useMemo(() => {
-    const byWeek = new Map<string, Entry[]>();
-    for (const e of entries) {
-      const arr = byWeek.get(e.week_start) ?? [];
-      arr.push(e);
-      byWeek.set(e.week_start, arr);
-    }
-    const paidMap = new Map(weeks.map((w) => [w.week_start, w]));
-    const ids = new Set<string>([...weeks.map((w) => w.week_start), ...entries.map((e) => e.week_start)]);
-    const views: WeekView[] = [];
-    ids.forEach((id) => {
-      const es = byWeek.get(id) ?? [];
-      const wk = paidMap.get(id);
-      views.push({
-        week_start: id,
-        paid: wk?.paid ?? false,
-        paid_at: wk?.paid_at ?? null,
-        entries: es,
-        total: round2(es.reduce((s, e) => s + e.amount, 0)),
-        count: es.reduce((s, e) => s + e.qty, 0),
-      });
-    });
-    return views.sort((a, b) => (a.week_start < b.week_start ? 1 : -1));
-  }, [weeks, entries]);
-
-  const shown = weekViews.filter((w) => w.entries.length > 0);
-  const unpaid = shown.filter((w) => !w.paid);
-  const owed = round2(unpaid.reduce((s, w) => s + w.total, 0));
-  const owedQty = unpaid.reduce((s, w) => s + w.count, 0);
-  const cur = weekViews.find((w) => w.week_start === weekIdOf(todayStr())) ?? null;
-  const todayEntry = cur?.entries.find((e) => e.day === todayStr()) ?? null;
-
-  // ── actions ──
-  const withBusy = async (fn: () => Promise<void>) => {
-    if (busy) return;
+  async function withBusy(fn: () => Promise<void>): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     try {
       await fn();
       await load();
+      return true;
     } catch {
-      setOffline(true);
+      markOffline();
+      return false;
     } finally {
       setBusy(false);
     }
-  };
+  }
 
-  async function addToday() {
-    setAddErr("");
-    if (!user) return;
-    if (cur?.paid) {
-      setAddErr("This week is marked paid. Reopen it to add more.");
-      return;
-    }
-    const parsed = parseQty(qtyRaw);
-    if (!parsed) {
-      setAddErr("Enter a number like 5 (or 50x0.75).");
-      return;
-    }
-    const note = noteRaw.trim().slice(0, 60);
+  async function handleAdd(parsed: ParsedQty, note: string): Promise<boolean> {
+    if (!user) return false;
     const day = todayStr();
     const weekId = weekIdOf(day);
     const wasThere = !!todayEntry;
-    await withBusy(async () => {
+    return withBusy(async () => {
       await db.addToday(weekId, day, { qty: parsed.qty, price: parsed.price, note }, todayEntry, user, device);
-      setQtyRaw("");
-      setNoteRaw("");
       flash(wasThere ? "Added to today" : "Today logged");
     });
   }
 
-  async function saveEdit(entry: Entry, qty: number, note: string) {
+  async function handleSaveEdit(entry: Entry, qty: number, note: string) {
     if (!user) return;
     await withBusy(async () => {
       await db.editEntry(entry, qty, note.trim().slice(0, 60), user, device);
@@ -175,7 +76,7 @@ export default function App() {
     });
   }
 
-  async function delEntry(entry: Entry) {
+  async function handleDeleteEntry(entry: Entry) {
     if (!user) return;
     await withBusy(async () => {
       await db.deleteEntry(entry, user, device);
@@ -184,7 +85,7 @@ export default function App() {
     });
   }
 
-  async function markPaid(weekId: string, paid: boolean) {
+  async function handleMarkPaid(weekId: string, paid: boolean) {
     if (!user) return;
     await withBusy(async () => {
       await db.setPaid(weekId, paid, user, device);
@@ -192,7 +93,7 @@ export default function App() {
     });
   }
 
-  async function settleAll() {
+  async function handleSettleAll() {
     if (!user) return;
     const ids = unpaid.map((w) => w.week_start);
     await withBusy(async () => {
@@ -201,25 +102,8 @@ export default function App() {
     });
   }
 
-  function signIn(name: string): boolean {
-    const clean = name.trim().toLowerCase();
-    if (!ALLOWED_NAMES.includes(clean)) return false;
-    setUser(clean);
-    try {
-      localStorage.setItem("khata.name", clean);
-    } catch {
-      /* ignore */
-    }
-    return true;
-  }
-
-  function signOut() {
-    try {
-      localStorage.removeItem("khata.name");
-    } catch {
-      /* ignore */
-    }
-    setUser(null);
+  function handleSignOut() {
+    signOut();
     setTab("ledger");
   }
 
@@ -236,16 +120,8 @@ export default function App() {
   }
 
   // ── render ──
-  if (checking) {
-    return (
-      <div className="khata">
-        <div className="boot">
-          <Roti size={30} />
-          <span>Opening the khata…</span>
-        </div>
-      </div>
-    );
-  }
+
+  if (checking) return <BootScreen />;
 
   if (!user) {
     return (
@@ -258,156 +134,56 @@ export default function App() {
   return (
     <div className="khata">
       <div className="shell">
-        <header className="hdr">
-          <div className="brand">
-            <Roti size={26} />
-            <div>
-              <div className="brand-name">Chapati Khata</div>
-              <div className="brand-sub">the roti tab</div>
-            </div>
-          </div>
-          <div className="hdr-r">
-            <button className="icon-btn" onClick={exportJSON} aria-label="Download backup">
-              <IcDownload className="ic" />
-            </button>
-            <button className="icon-btn" onClick={load} aria-label="Refresh" disabled={loading}>
-              <IcRefresh className={"ic" + (loading ? " spin" : "")} />
-            </button>
-            <button
-              className="who"
-              onClick={() =>
-                setConfirm({
-                  title: "Signed in as " + cap(user),
-                  body: "Switching just changes the name recorded in the log. The tab is shared.",
-                  cta: "Switch user",
-                  tone: "plain",
-                  onYes: signOut,
-                })
-              }
-            >
-              {cap(user)}
-            </button>
-          </div>
-        </header>
+        <Header
+          loading={loading}
+          userName={user}
+          onExport={exportJSON}
+          onRefresh={load}
+          onUserClick={() =>
+            setConfirm({
+              title: "Signed in as " + cap(user),
+              body: "Switching just changes the name recorded in the log. The tab is shared.",
+              cta: "Switch user",
+              tone: "plain",
+              onYes: handleSignOut,
+            })
+          }
+        />
 
-        <div className="seg" role="tablist">
-          <button
-            role="tab"
-            aria-selected={tab === "ledger"}
-            className={"seg-b" + (tab === "ledger" ? " on" : "")}
-            onClick={() => setTab("ledger")}
-          >
-            Ledger
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === "log"}
-            className={"seg-b" + (tab === "log" ? " on" : "")}
-            onClick={() => setTab("log")}
-          >
-            Log
-          </button>
-        </div>
+        <TabSwitcher tab={tab} onTabChange={setTab} />
 
-        {offline && (
-          <div className="banner">
-            <span>Can’t reach the shared khata. Check your connection.</span>
-            <button className="link" onClick={load}>
-              Try again
-            </button>
-          </div>
-        )}
+        {offline && <OfflineBanner onRetry={load} />}
 
         {tab === "ledger" ? (
           <main className="scroll">
-            <section className={"topay" + (owed > 0 ? " due" : " clear")}>
-              {owed > 0 ? (
-                <>
-                  <div className="topay-label">To pay</div>
-                  <div className="topay-amt">{money(owed)}</div>
-                  <div className="topay-meta">
-                    {unpaid.length} week{unpaid.length > 1 ? "s" : ""} open · {owedQty} chapati
-                    {owedQty !== 1 ? "s" : ""}
-                  </div>
-                  {unpaid.length > 1 && (
-                    <button
-                      className="btn btn-solid wide"
-                      disabled={busy}
-                      onClick={() =>
-                        setConfirm({
-                          title: "Settle every open week?",
-                          body: "Marks all " + unpaid.length + " unpaid weeks paid — " + money(owed) + " total.",
-                          cta: "Mark all paid",
-                          tone: "go",
-                          onYes: settleAll,
-                        })
-                      }
-                    >
-                      Settle all {unpaid.length} weeks
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="clear-badge">
-                    <IcCheck className="ic" />
-                  </div>
-                  <div className="topay-amt sm">All settled</div>
-                  <div className="topay-meta">Nothing owed to the lady right now.</div>
-                </>
-              )}
-            </section>
+            <ToPayCard
+              owed={owed}
+              owedQty={owedQty}
+              unpaid={unpaid}
+              busy={busy}
+              onSettle={() =>
+                setConfirm({
+                  title: "Settle every open week?",
+                  body: "Marks all " + unpaid.length + " unpaid weeks paid — " + money(owed) + " total.",
+                  cta: "Mark all paid",
+                  tone: "go",
+                  onYes: handleSettleAll,
+                })
+              }
+            />
 
-            <section className="add">
-              <div className="add-head">
-                <span className="eyebrow">Add today</span>
-                <span className="add-date">{dayLabel(todayStr())}</span>
-              </div>
-              <div className="add-row">
-                <input
-                  className="in qty"
-                  inputMode="numeric"
-                  placeholder="How many?"
-                  value={qtyRaw}
-                  onChange={(e) => {
-                    setQtyRaw(sanitize(e.target.value));
-                    setAddErr("");
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") addToday();
-                  }}
-                  aria-label="Chapati count"
-                />
-                <button className="btn btn-solid add-btn" disabled={busy} onClick={addToday} aria-label="Add to today">
-                  <IcPlus className="ic" />
-                  <span>Add</span>
-                </button>
-              </div>
-              <input
-                className="in note"
-                placeholder="Note (optional) — e.g. extra for a guest"
-                value={noteRaw}
-                maxLength={60}
-                onChange={(e) => setNoteRaw(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") addToday();
-                }}
-                aria-label="Optional note"
-              />
-              {addErr && <div className="add-err">{addErr}</div>}
-              {todayEntry && !addErr && (
-                <div className="add-hint">
-                  Today so far · <b>{todayEntry.qty}</b> chapati{todayEntry.qty !== 1 ? "s" : ""} ·{" "}
-                  {money(todayEntry.amount)}
-                </div>
-              )}
-            </section>
+            <AddForm
+              todayEntry={todayEntry}
+              curWeekPaid={cur?.paid ?? false}
+              busy={busy}
+              onAdd={handleAdd}
+            />
 
             {shown.length === 0 ? (
               <div className="empty">
                 <Roti size={40} />
                 <p>No orders yet.</p>
-                <span>Add today’s chapatis above and the week will appear here.</span>
+                <span>Add today's chapatis above and the week will appear here.</span>
               </div>
             ) : (
               shown.map((w) => (
@@ -416,21 +192,20 @@ export default function App() {
                   w={w}
                   busy={busy}
                   onEntry={(entry) => setEditing(entry)}
-                  onPay={() => markPaid(w.week_start, true)}
+                  onPay={() => handleMarkPaid(w.week_start, true)}
                   onReopen={() =>
                     setConfirm({
                       title: "Reopen this week?",
-                      body:
-                        "It will go back to unpaid so entries can be edited. It re-joins your total.",
+                      body: "It will go back to unpaid so entries can be edited. It re-joins your total.",
                       cta: "Reopen",
                       tone: "plain",
-                      onYes: () => markPaid(w.week_start, false),
+                      onYes: () => handleMarkPaid(w.week_start, false),
                     })
                   }
                 />
               ))
             )}
-            <div className="foot">Shared tab · {shown.length} week{shown.length !== 1 ? "s" : ""} on record</div>
+            <div className="foot">Shared tab &middot; {shown.length} week{shown.length !== 1 ? "s" : ""} on record</div>
           </main>
         ) : (
           <LogView logs={logs} />
@@ -442,50 +217,14 @@ export default function App() {
           entry={editing}
           busy={busy}
           onClose={() => setEditing(null)}
-          onSave={saveEdit}
-          onDelete={delEntry}
+          onSave={handleSaveEdit}
+          onDelete={handleDeleteEntry}
         />
       )}
 
-      {confirm && (
-        <div className="ovl" onClick={() => setConfirm(null)}>
-          <div className="dlg" onClick={(e) => e.stopPropagation()}>
-            <div className="dlg-head">
-              <h3 className="dlg-t">{confirm.title}</h3>
-              <button className="icon-btn" onClick={() => setConfirm(null)} aria-label="Close">
-                <IcX className="ic" />
-              </button>
-            </div>
-            <p className="dlg-b">{confirm.body}</p>
-            <div className="dlg-a">
-              <button className="btn btn-ghost" onClick={() => setConfirm(null)}>
-                Cancel
-              </button>
-              <button
-                className={"btn " + (confirm.tone === "go" ? "btn-go" : "btn-solid")}
-                disabled={busy}
-                onClick={() => {
-                  const f = confirm.onYes;
-                  setConfirm(null);
-                  f();
-                }}
-              >
-                {confirm.cta}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirm && <ConfirmDialog confirm={confirm} busy={busy} onClose={clearConfirm} />}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <Toast message={toast} />}
     </div>
   );
-}
-
-// keep the add box to digits + a single 'x'
-function sanitize(v: string): string {
-  let s = v.replace(/[^0-9x]/gi, "").toLowerCase();
-  const parts = s.split("x");
-  if (parts.length > 2) s = parts[0] + "x" + parts.slice(1).join("");
-  return s;
 }

@@ -47,12 +47,16 @@ export const LOG_PAGE = 20;
 
 /** Fetch all weeks (tiny), only unpaid entries, and first page of logs. */
 export async function loadActive(): Promise<{ weeks: Week[]; entries: Entry[]; logs: LogRow[] }> {
-  // Always fetch all weeks — they're small (one row per calendar week).
-  const w = await supabase.from("weeks").select("*");
+  // Weeks + logs can run in parallel (independent queries).
+  const [w, l] = await Promise.all([
+    supabase.from("weeks").select("*"),
+    supabase.from("logs").select("*").order("ts", { ascending: false }).limit(LOG_PAGE),
+  ]);
   if (w.error) fail("load weeks", w.error);
+  if (l.error) fail("load logs", l.error);
   const weeks = (w.data ?? []) as Week[];
 
-  // Fetch entries only for unpaid weeks.
+  // Entries depend on weeks result — fetch only for unpaid weeks.
   const unpaidIds = weeks.filter((wk) => !wk.paid).map((wk) => wk.week_start);
   let entries: Entry[] = [];
   if (unpaidIds.length > 0) {
@@ -60,9 +64,6 @@ export async function loadActive(): Promise<{ weeks: Week[]; entries: Entry[]; l
     if (e.error) fail("load entries", e.error);
     entries = (e.data ?? []) as Entry[];
   }
-
-  const l = await supabase.from("logs").select("*").order("ts", { ascending: false }).limit(LOG_PAGE);
-  if (l.error) fail("load logs", l.error);
 
   return { weeks, entries, logs: (l.data ?? []) as LogRow[] };
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import type { Entry } from "./types";
 import type { ParsedQty } from "./lib/util";
 import * as db from "./lib/db";
@@ -44,13 +44,15 @@ export default function App() {
   const [editing, setEditing] = useState<Entry | null>(null);
   const [busy, setBusy] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const busyRef = useRef(false);
 
   const device = useMemo(() => getDeviceId(), []);
 
   // ── action helpers ──
 
-  async function withBusy(fn: () => Promise<void>): Promise<boolean> {
-    if (busy) return false;
+  const withBusy = useCallback(async (fn: () => Promise<void>): Promise<boolean> => {
+    if (busyRef.current) return false;
+    busyRef.current = true;
     setBusy(true);
     try {
       await fn();
@@ -60,9 +62,10 @@ export default function App() {
       markOffline();
       return false;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
-  }
+  }, [load, markOffline]);
 
   async function handleAdd(parsed: ParsedQty, note: string, date: string): Promise<boolean> {
     if (!user) return false;
@@ -222,7 +225,7 @@ export default function App() {
                   const prevYear = i > 0 ? unpaid[i - 1].week_start.slice(0, 4) : null;
                   const year = w.week_start.slice(0, 4);
                   return (
-                    <React.Fragment key={w.week_start}>
+                    <Fragment key={w.week_start}>
                       {prevYear && year !== prevYear && <div className="year-sep">{year}</div>}
                       <WeekCard
                         w={w}
@@ -239,7 +242,7 @@ export default function App() {
                         }
                         onReopen={() => {}}
                       />
-                    </React.Fragment>
+                    </Fragment>
                   );
                 })}
 

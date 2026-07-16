@@ -10,9 +10,11 @@ interface Props {
   onReopen: () => void;
 }
 
+const CURRENT_YEAR = String(new Date().getFullYear());
+
 export function WeekCard({ w, busy, onEntry, onPay, onReopen }: Props) {
   const rows = [...w.entries].sort((a, b) => (a.day < b.day ? 1 : -1));
-  const showYear = w.week_start.slice(0, 4) !== String(new Date().getFullYear());
+  const showYear = w.week_start.slice(0, 4) !== CURRENT_YEAR;
 
   return (
     <section className={"week" + (w.paid ? " paid" : "") + (isCurrentWeek(w.week_start) ? " now" : "")}>

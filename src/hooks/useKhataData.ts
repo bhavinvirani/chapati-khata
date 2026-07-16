@@ -138,12 +138,19 @@ export function useKhataData(onBooted: () => void) {
     return views.sort((a, b) => (a.week_start < b.week_start ? 1 : -1));
   }, [weeks, allEntries]);
 
-  const shown = weekViews.filter((w) => w.entries.length > 0);
-  const unpaid = shown.filter((w) => !w.paid);
-  const paid = shown.filter((w) => w.paid);
-  const owed = round2(unpaid.reduce((s, w) => s + w.total, 0));
-  const owedQty = unpaid.reduce((s, w) => s + w.count, 0);
-  const paidCount = weeks.filter((w) => w.paid).length;
+  const { shown, unpaid, paid, owed, owedQty, paidCount } = useMemo(() => {
+    const s = weekViews.filter((w) => w.entries.length > 0);
+    const u = s.filter((w) => !w.paid);
+    const p = s.filter((w) => w.paid);
+    return {
+      shown: s,
+      unpaid: u,
+      paid: p,
+      owed: round2(u.reduce((acc, w) => acc + w.total, 0)),
+      owedQty: u.reduce((acc, w) => acc + w.count, 0),
+      paidCount: weeks.filter((w) => w.paid).length,
+    };
+  }, [weekViews, weeks]);
   const historyLoaded = historyLoadedRef.current;
 
   return {

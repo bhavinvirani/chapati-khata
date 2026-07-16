@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Entry, Week } from "../types";
 import type { ParsedQty } from "../lib/util";
 import { DEFAULT_PRICE } from "../config";
@@ -16,13 +16,17 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
   const [qtyRaw, setQtyRaw] = useState("");
   const [noteRaw, setNoteRaw] = useState("");
   const [addErr, setAddErr] = useState("");
-  const [selectedDate, setSelectedDate] = useState(todayStr());
+  const today = todayStr();
+  const [selectedDate, setSelectedDate] = useState(today);
 
-  const isToday = selectedDate === todayStr();
-  const weekId = weekIdOf(selectedDate);
-  const weekData = weeks.find((w) => w.week_start === weekId);
-  const weekPaid = weekData?.paid ?? false;
-  const existingEntry = entries.find((e) => e.day === selectedDate) ?? null;
+  const isToday = selectedDate === today;
+  const { weekPaid, existingEntry } = useMemo(() => {
+    const wid = weekIdOf(selectedDate);
+    return {
+      weekPaid: weeks.find((w) => w.week_start === wid)?.paid ?? false,
+      existingEntry: entries.find((e) => e.day === selectedDate) ?? null,
+    };
+  }, [selectedDate, weeks, entries]);
 
   async function handleAdd() {
     setAddErr("");
@@ -52,9 +56,9 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
             type="date"
             className="add-date-pick"
             value={selectedDate}
-            max={todayStr()}
+            max={today}
             onChange={(e) => {
-              setSelectedDate(e.target.value || todayStr());
+              setSelectedDate(e.target.value || today);
               setAddErr("");
             }}
             aria-label="Entry date"

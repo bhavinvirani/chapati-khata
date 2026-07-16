@@ -4,6 +4,7 @@ import type { ParsedQty } from "./lib/util";
 import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
 import { cap, dayLabel, money, todayStr, weekIdOf } from "./lib/util";
+import { ALLOWED_NAMES } from "./config";
 import { useAuth } from "./hooks/useAuth";
 import { useKhataData } from "./hooks/useKhataData";
 import { useToast } from "./hooks/useToast";
@@ -130,18 +131,29 @@ export default function App() {
   if (checking) return <BootScreen />;
 
   if (!user) {
-    const handleSignIn = (name: string): boolean => {
-      const ok = signIn(name);
-      if (ok) {
-        const clean = name.trim().toLowerCase();
-        db.logLogin(clean, device).catch(() => {});
-        load();
+    const handleGateSubmit = async (name: string, code: string): Promise<"name" | "code" | "network" | null> => {
+      const clean = name.trim().toLowerCase();
+      if (ENTRY_CODE) {
+        // Local dev: validate from .env + config.ts
+        if (code !== ENTRY_CODE) return "code";
+        if (!ALLOWED_NAMES.includes(clean)) return "name";
+      } else {
+        // Production: validate via edge function
+        try {
+          const result = await db.validateAccess(clean, code);
+          if (!result.ok) return (result.error as "code" | "name") ?? "code";
+        } catch {
+          return "network";
+        }
       }
-      return ok;
+      signIn(clean);
+      db.logLogin(clean, device).catch(() => {});
+      load();
+      return null;
     };
     return (
       <div className="khata">
-        <Gate onSubmit={handleSignIn} entryCode={ENTRY_CODE} />
+        <Gate onSubmit={handleGateSubmit} />
       </div>
     );
   }

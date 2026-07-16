@@ -72,6 +72,18 @@ export async function loadMoreLogs(beforeTs: string, beforeId: string): Promise<
 
 // ── writes ──
 
+/** Validate name + code via Supabase Edge Function (production). */
+export async function validateAccess(
+  name: string,
+  code: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("validate-access", {
+    body: { name, code },
+  });
+  if (error) throw error;
+  return data as { ok: boolean; error?: string };
+}
+
 /** Record that a user signed in. */
 export async function logLogin(actor: string, deviceId: string): Promise<void> {
   await logAction({ actor, action: "login", device_id: deviceId });

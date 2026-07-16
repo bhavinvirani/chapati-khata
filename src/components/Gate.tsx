@@ -4,15 +4,18 @@ import { Roti } from "./icons";
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 30_000;
 
+type GateError = "name" | "code" | "network" | null;
+
 interface Props {
-  onSubmit: (name: string) => boolean;
-  entryCode?: string;
+  /** Validate name + code. Return null on success, or the error key. */
+  onSubmit: (name: string, code: string) => Promise<GateError>;
 }
 
-export function Gate({ onSubmit, entryCode }: Props) {
+export function Gate({ onSubmit }: Props) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [err, setErr] = useState<"name" | "code" | "locked" | null>(null);
+  const [err, setErr] = useState<GateError | "locked">(null);
+  const [loading, setLoading] = useState(false);
   const [lockUntil, setLockUntil] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const attempts = useRef(0);
@@ -36,25 +39,29 @@ export function Gate({ onSubmit, entryCode }: Props) {
 
   const locked = countdown > 0;
 
-  const go = () => {
-    if (locked) return;
+  const go = async () => {
+    if (locked || loading) return;
     setErr(null);
-    if (entryCode && code !== entryCode) {
-      attempts.current++;
-      if (attempts.current >= MAX_ATTEMPTS) {
-        attempts.current = 0;
-        setLockUntil(Date.now() + LOCKOUT_MS);
-        setErr("locked");
+    setLoading(true);
+    try {
+      const result = await onSubmit(name, code);
+      if (!result) return; // success — parent handles navigation
+      if (result === "code") {
+        attempts.current++;
+        if (attempts.current >= MAX_ATTEMPTS) {
+          attempts.current = 0;
+          setLockUntil(Date.now() + LOCKOUT_MS);
+          setErr("locked");
+        } else {
+          setErr("code");
+        }
       } else {
-        setErr("code");
+        setErr(result);
       }
-      return;
-    }
-    // code is correct — reset attempts
-    attempts.current = 0;
-    if (!onSubmit(name)) {
-      setErr("name");
-      return;
+    } catch {
+      setErr("network");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,7 +79,7 @@ export function Gate({ onSubmit, entryCode }: Props) {
           value={name}
           autoFocus
           autoComplete="off"
-          disabled={locked}
+          disabled={locked || loading}
           onChange={(e) => {
             setName(e.target.value);
             setErr(null);
@@ -87,39 +94,40 @@ export function Gate({ onSubmit, entryCode }: Props) {
             Not allowed. Check the spelling, or ask to be added.
           </div>
         )}
-        {entryCode && (
-          <>
-            <input
-              className={"in gate-in gate-code" + (err === "code" || err === "locked" ? " bad" : "")}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete="off"
-              maxLength={4}
-              placeholder="- - - -"
-              value={code}
-              disabled={locked}
-              onChange={(e) => {
-                setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 4));
-                setErr(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") go();
-              }}
-              aria-label="Access code"
-            />
-            {err === "code" && (
-              <div className="gate-err">Wrong access code.</div>
-            )}
-            {err === "locked" && (
-              <div className="gate-err">
-                Too many attempts. Try again in {countdown}s.
-              </div>
-            )}
-          </>
+        <input
+          className={"in gate-in gate-code" + (err === "code" || err === "locked" ? " bad" : "")}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          maxLength={4}
+          placeholder="- - - -"
+          value={code}
+          disabled={locked || loading}
+          onChange={(e) => {
+            setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 4));
+            setErr(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") go();
+          }}
+          aria-label="Access code"
+        />
+        {err === "code" && (
+          <div className="gate-err">Wrong access code.</div>
         )}
-        <button className="btn btn-solid wide" onClick={go} disabled={locked}>
-          {locked ? `Locked (${countdown}s)` : "Open the khata"}
+        {err === "locked" && (
+          <div className="gate-err">
+            Too many attempts. Try again in {countdown}s.
+          </div>
+        )}
+        {err === "network" && (
+          <div className="gate-err">
+            Can't reach the server. Check your connection.
+          </div>
+        )}
+        <button className="btn btn-solid wide" onClick={go} disabled={locked || loading}>
+          {locked ? `Locked (${countdown}s)` : loading ? "Checking\u2026" : "Open the khata"}
         </button>
       </div>
       <div className="gate-foot">

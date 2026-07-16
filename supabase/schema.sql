@@ -53,6 +53,11 @@ create policy "authed all - weeks"   on public.weeks   for all to authenticated 
 create policy "authed all - entries" on public.entries for all to authenticated using (true) with check (true);
 create policy "authed all - logs"    on public.logs    for all to authenticated using (true) with check (true);
 
+-- RLS policies only take effect once the role also holds the table-level
+-- grant; without this, queries fail with "permission denied for table ...".
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.weeks, public.entries, public.logs to authenticated;
+
 -- ── Realtime so every device sees changes instantly ──
 alter publication supabase_realtime add table public.weeks;
 alter publication supabase_realtime add table public.entries;

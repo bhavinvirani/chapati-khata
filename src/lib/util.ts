@@ -70,10 +70,20 @@ export function parseQty(raw: string): ParsedQty | null {
   return null;
 }
 
-/** Restrict the add input to digits and a single 'x'. */
+/** Restrict the add input to digits, a single 'x', and a decimal in the price part. */
 export function sanitizeQty(v: string): string {
-  let s = v.replace(/[^0-9x]/gi, "").toLowerCase();
-  const parts = s.split("x");
-  if (parts.length > 2) s = parts[0] + "x" + parts.slice(1).join("");
-  return s;
+  const s = v.replace(/[^0-9x.]/gi, "").toLowerCase();
+  const xi = s.indexOf("x");
+  if (xi === -1) {
+    // qty-only mode: digits only, no dots
+    return s.replace(/\./g, "");
+  }
+  // before x: digits only; after x: digits + at most one dot
+  const before = s.slice(0, xi).replace(/[^0-9]/g, "");
+  let after = s.slice(xi + 1).replace(/x/g, "");
+  const dot = after.indexOf(".");
+  if (dot !== -1) {
+    after = after.slice(0, dot + 1) + after.slice(dot + 1).replace(/\./g, "");
+  }
+  return before + "x" + after;
 }

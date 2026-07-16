@@ -39,11 +39,13 @@ async function logAction(row: {
 }
 
 // ── reads ──
+export const LOG_PAGE = 20;
+
 export async function loadAll(): Promise<{ weeks: Week[]; entries: Entry[]; logs: LogRow[] }> {
   const [w, e, l] = await Promise.all([
     supabase.from("weeks").select("*"),
     supabase.from("entries").select("*"),
-    supabase.from("logs").select("*").order("ts", { ascending: false }).limit(500),
+    supabase.from("logs").select("*").order("ts", { ascending: false }).limit(LOG_PAGE),
   ]);
   if (w.error) fail("load weeks", w.error);
   if (e.error) fail("load entries", e.error);
@@ -55,7 +57,25 @@ export async function loadAll(): Promise<{ weeks: Week[]; entries: Entry[]; logs
   };
 }
 
+/** Load older logs using composite cursor (ts + id) to handle duplicate timestamps. */
+export async function loadMoreLogs(beforeTs: string, beforeId: string): Promise<LogRow[]> {
+  const { data, error } = await supabase
+    .from("logs")
+    .select("*")
+    .or(`ts.lt.${beforeTs},and(ts.eq.${beforeTs},id.lt.${beforeId})`)
+    .order("ts", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(LOG_PAGE);
+  if (error) fail("loadMoreLogs", error);
+  return (data ?? []) as LogRow[];
+}
+
 // ── writes ──
+
+/** Record that a user signed in. */
+export async function logLogin(actor: string, deviceId: string): Promise<void> {
+  await logAction({ actor, action: "login", device_id: deviceId });
+}
 
 /** Ensure a week row exists without disturbing its paid state. */
 async function ensureWeek(weekId: string): Promise<void> {

@@ -15,7 +15,7 @@ export interface Entry {
   note: string;
 }
 
-export type LogAction = "create" | "add" | "edit" | "delete" | "paid" | "reopen";
+export type LogAction = "create" | "add" | "edit" | "delete" | "paid" | "reopen" | "login";
 
 export interface LogRow {
   id: string;

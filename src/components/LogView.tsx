@@ -1,21 +1,23 @@
 import type { LogRow } from "../types";
 import { Roti } from "./icons";
-import { dayLabel, stamp, weekLabel } from "../lib/util";
+import { cap, dayLabel, stamp, weekLabel } from "../lib/util";
 
 function logText(ev: LogRow): string {
   switch (ev.action) {
     case "create":
-      return `Logged ${ev.qty_after} for ${ev.day ? dayLabel(ev.day) : "a day"}`;
+      return `logged ${ev.qty_after} for ${ev.day ? dayLabel(ev.day) : "a day"}`;
     case "add":
-      return `Added to ${ev.day ? dayLabel(ev.day) : "a day"} (${ev.qty_before} → ${ev.qty_after})`;
+      return `added to ${ev.day ? dayLabel(ev.day) : "a day"} (${ev.qty_before} \u2192 ${ev.qty_after})`;
     case "edit":
-      return `Edited ${ev.day ? dayLabel(ev.day) : "a day"} (${ev.qty_before} → ${ev.qty_after})`;
+      return `edited ${ev.day ? dayLabel(ev.day) : "a day"} (${ev.qty_before} \u2192 ${ev.qty_after})`;
     case "delete":
-      return `Deleted ${ev.day ? dayLabel(ev.day) : "a day"} (had ${ev.qty_before})`;
+      return `deleted ${ev.day ? dayLabel(ev.day) : "a day"} (had ${ev.qty_before})`;
     case "paid":
-      return `Marked ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"} paid`;
+      return `marked ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"} paid`;
     case "reopen":
-      return `Reopened ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"}`;
+      return `reopened ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"}`;
+    case "login":
+      return "signed in";
     default:
       return ev.action;
   }
@@ -28,9 +30,16 @@ const KIND: Record<string, string> = {
   delete: "c-del",
   paid: "c-paid",
   reopen: "c-open",
+  login: "c-login",
 };
 
-export function LogView({ logs }: { logs: LogRow[] }) {
+interface Props {
+  logs: LogRow[];
+  hasMore: boolean;
+  onLoadMore: () => void;
+}
+
+export function LogView({ logs, hasMore, onLoadMore }: Props) {
   if (!logs.length) {
     return (
       <main className="scroll">
@@ -51,13 +60,20 @@ export function LogView({ logs }: { logs: LogRow[] }) {
           <li key={ev.id} className="log-row">
             <span className={"log-dot " + (KIND[ev.action] || "c-add")} />
             <div className="log-body">
-              <div className="log-what">{logText(ev)}</div>
+              <div className="log-what">
+                <b className="log-actor">{cap(ev.actor)}</b> {logText(ev)}
+              </div>
               <div className="log-when">{stamp(ev.ts)}</div>
             </div>
           </li>
         ))}
       </ul>
-      <div className="foot">Names are recorded but not shown here.</div>
+      {hasMore && (
+        <button className="btn btn-ghost wide log-more" onClick={onLoadMore}>
+          Load more
+        </button>
+      )}
+      <div className="foot">Make your life easy</div>
     </main>
   );
 }

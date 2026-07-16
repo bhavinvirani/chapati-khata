@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Entry, LogRow, Week, WeekView } from "../types";
 import * as db from "../lib/db";
 import { ensureAuth } from "../lib/supabase";
-import { round2, todayStr, weekIdOf } from "../lib/util";
+import { round2 } from "../lib/util";
 
 export function useKhataData(onBooted: () => void) {
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [logs, setLogs] = useState<LogRow[]>([]);
+  const [hasMoreLogs, setHasMoreLogs] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -21,6 +22,7 @@ export function useKhataData(onBooted: () => void) {
       setWeeks(data.weeks);
       setEntries(data.entries);
       setLogs(data.logs);
+      setHasMoreLogs(data.logs.length >= db.LOG_PAGE);
       setOffline(false);
     } catch {
       setOffline(true);
@@ -61,6 +63,18 @@ export function useKhataData(onBooted: () => void) {
     };
   }, [ready, load]);
 
+  async function loadMoreLogs() {
+    if (!hasMoreLogs || logs.length === 0) return;
+    const last = logs[logs.length - 1];
+    try {
+      const more = await db.loadMoreLogs(last.ts, last.id);
+      if (more.length > 0) setLogs((prev) => [...prev, ...more]);
+      setHasMoreLogs(more.length >= db.LOG_PAGE);
+    } catch {
+      // silent — user can retry
+    }
+  }
+
   // derived
   const weekViews: WeekView[] = useMemo(() => {
     const byWeek = new Map<string, Entry[]>();
@@ -91,13 +105,12 @@ export function useKhataData(onBooted: () => void) {
   const unpaid = shown.filter((w) => !w.paid);
   const owed = round2(unpaid.reduce((s, w) => s + w.total, 0));
   const owedQty = unpaid.reduce((s, w) => s + w.count, 0);
-  const cur = weekViews.find((w) => w.week_start === weekIdOf(todayStr())) ?? null;
-  const todayEntry = cur?.entries.find((e) => e.day === todayStr()) ?? null;
 
   return {
     weeks, entries, logs,
     loading, offline, checking,
     load, markOffline,
-    shown, unpaid, owed, owedQty, todayEntry, cur,
+    hasMoreLogs, loadMoreLogs,
+    shown, unpaid, owed, owedQty,
   };
 }

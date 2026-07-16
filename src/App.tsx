@@ -3,7 +3,7 @@ import type { Entry } from "./types";
 import type { ParsedQty } from "./lib/util";
 import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
-import { cap, money, todayStr, weekIdOf } from "./lib/util";
+import { cap, dayLabel, money, todayStr, weekIdOf } from "./lib/util";
 import { useAuth } from "./hooks/useAuth";
 import { useKhataData } from "./hooks/useKhataData";
 import { useToast } from "./hooks/useToast";
@@ -22,13 +22,16 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { Toast } from "./components/Toast";
 import { Roti } from "./components/icons";
 
+const ENTRY_CODE = import.meta.env.VITE_ENTRY_CODE as string | undefined;
+
 export default function App() {
   const { user, signIn, signOut, restoreUser } = useAuth();
   const {
     weeks, entries, logs,
     loading, offline, checking,
     load, markOffline,
-    shown, unpaid, owed, owedQty, todayEntry, cur,
+    hasMoreLogs, loadMoreLogs,
+    shown, unpaid, owed, owedQty,
   } = useKhataData(restoreUser);
   const { toast, flash } = useToast();
   const { confirm, setConfirm, clearConfirm } = useConfirm();
@@ -56,14 +59,17 @@ export default function App() {
     }
   }
 
-  async function handleAdd(parsed: ParsedQty, note: string): Promise<boolean> {
+  async function handleAdd(parsed: ParsedQty, note: string, date: string): Promise<boolean> {
     if (!user) return false;
-    const day = todayStr();
-    const weekId = weekIdOf(day);
-    const wasThere = !!todayEntry;
+    const weekId = weekIdOf(date);
+    const existing = entries.find((e) => e.day === date) ?? null;
+    const wasThere = !!existing;
+    const isToday = date === todayStr();
     return withBusy(async () => {
-      await db.addToday(weekId, day, { qty: parsed.qty, price: parsed.price, note }, todayEntry, user, device);
-      flash(wasThere ? "Added to today" : "Today logged");
+      await db.addToday(weekId, date, { qty: parsed.qty, price: parsed.price, note }, existing, user, device);
+      flash(wasThere
+        ? `Added to ${isToday ? "today" : dayLabel(date)}`
+        : `${isToday ? "Today" : dayLabel(date)} logged`);
     });
   }
 
@@ -124,9 +130,18 @@ export default function App() {
   if (checking) return <BootScreen />;
 
   if (!user) {
+    const handleSignIn = (name: string): boolean => {
+      const ok = signIn(name);
+      if (ok) {
+        const clean = name.trim().toLowerCase();
+        db.logLogin(clean, device).catch(() => {});
+        load();
+      }
+      return ok;
+    };
     return (
       <div className="khata">
-        <Gate onSubmit={signIn} />
+        <Gate onSubmit={handleSignIn} entryCode={ENTRY_CODE} />
       </div>
     );
   }
@@ -173,8 +188,8 @@ export default function App() {
             />
 
             <AddForm
-              todayEntry={todayEntry}
-              curWeekPaid={cur?.paid ?? false}
+              entries={entries}
+              weeks={weeks}
               busy={busy}
               onAdd={handleAdd}
             />
@@ -208,7 +223,7 @@ export default function App() {
             <div className="foot">Shared tab &middot; {shown.length} week{shown.length !== 1 ? "s" : ""} on record</div>
           </main>
         ) : (
-          <LogView logs={logs} />
+          <LogView logs={logs} hasMore={hasMoreLogs} onLoadMore={loadMoreLogs} />
         )}
       </div>
 

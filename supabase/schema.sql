@@ -61,6 +61,26 @@ grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.weeks, public.entries, public.logs to authenticated;
 
 -- ── Realtime so every device sees changes instantly ──
-alter publication supabase_realtime add table public.weeks;
-alter publication supabase_realtime add table public.entries;
-alter publication supabase_realtime add table public.logs;
+-- Guarded because `alter publication ... add table` has no `if not exists`
+-- form and errors ("already member of publication") on a second run.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'weeks'
+  ) then
+    alter publication supabase_realtime add table public.weeks;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'entries'
+  ) then
+    alter publication supabase_realtime add table public.entries;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'logs'
+  ) then
+    alter publication supabase_realtime add table public.logs;
+  end if;
+end $$;

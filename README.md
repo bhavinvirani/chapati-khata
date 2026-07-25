@@ -73,16 +73,22 @@ same URL in a second browser/phone - changes should appear live in both.
 
 ## Step 3 - Set your group's names and price
 
-Edit [`src/config.ts`](src/config.ts):
+Names live in [`allowed-names.json`](allowed-names.json) at the repo root:
+
+```json
+["bhavin", "abhishek", "deven", "parth", "pratik", "hitanshi", "samir"]
+```
+
+Price and currency live in [`src/config.ts`](src/config.ts):
 
 ```ts
-export const ALLOWED_NAMES = ["bhavin", "abhishek", "deven", "parth", "pratik", "hitanshi"];
 export const DEFAULT_PRICE = 0.5; // per chapati
 export const CURRENCY = "$";
 ```
 
-Names are matched case-insensitively. To add or remove someone, just edit this
-list and redeploy.
+Names are matched case-insensitively. To add or remove someone, just edit
+`allowed-names.json` and redeploy - CI keeps the production sign-in gate's
+allowlist in sync with this same file automatically.
 
 **Price tip:** the default price applies to every entry. If one day had a
 different rate, type it in the add box as `count x price`, e.g. `50x0.75`

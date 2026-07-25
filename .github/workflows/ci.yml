@@ -19,6 +19,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Lint Supabase migrations
+        # Secret-free by design, so fork PRs still get this signal. Filenames
+        # must match what `supabase migration new` generates, and destructive
+        # statements need an explicit `-- allow-destructive` opt-in — this is
+        # the actual review this project relies on, since deploy.yml applies
+        # migrations on merge with no manual approval step.
+        run: |
+          shopt -s nullglob
+          fail=0
+          for f in supabase/migrations/*.sql; do
+            base=$(basename "$f")
+            if ! [[ "$base" =~ ^[0-9]{14}_[a-zA-Z0-9_]+\.sql$ ]]; then
+              echo "::error file=$f::Migration filename must match <14-digit-timestamp>_name.sql (run \`supabase migration new <name>\`)"
+              fail=1
+            fi
+            # Strip whole-line SQL comments first so prose describing a
+            # statement (e.g. a header note explaining what was removed)
+            # can't false-positive on the keywords below.
+            if grep -v '^[[:space:]]*--' "$f" | grep -qiE '\b(drop[[:space:]]+table|drop[[:space:]]+column|drop[[:space:]]+schema|drop[[:space:]]+extension|truncate|delete[[:space:]]+from|alter[[:space:]]+column[[:space:]]+[^[:space:]]+[[:space:]]+type)\b' \
+              && ! grep -q -- '-- allow-destructive' "$f"; then
+              echo "::error file=$f::Destructive statement found (DROP TABLE/COLUMN/SCHEMA/EXTENSION, TRUNCATE, DELETE, or a column type change). Add a '-- allow-destructive' comment if this is intentional."
+              fail=1
+            fi
+          done
+          exit $fail
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc

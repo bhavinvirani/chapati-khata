@@ -1,10 +1,21 @@
 name: Deploy to GitHub Pages
 
 # Builds the site and publishes it to GitHub Pages on every push to main.
+# Also applies pending Supabase migrations, redeploys the validate-access edge
+# function, and tags a release — the whole ship happens on merge, no manual step.
+#
 # One-time setup:
 #   1. Settings → Pages → Build and deployment → Source: "GitHub Actions".
 #   2. Add repo secrets SUPABASE_URL and SUPABASE_ANON_KEY
 #      (Settings → Secrets and variables → Actions). Same two the keep-alive uses.
+#   3. Create a "production" environment (Settings → Environments) and add two
+#      environment secrets there: SUPABASE_ACCESS_TOKEN (dashboard → Account →
+#      Access Tokens) and SUPABASE_DB_PASSWORD (Project Settings → Database).
+#      Scoped to this environment, not repo-wide, since they grant real write
+#      access to the account and database.
+#   4. Before the first run: bootstrap supabase/migrations/ locally with
+#      `supabase db pull` against the live project (see supabase/schema.sql
+#      for what it should contain) — this repo has no migration history yet.
 # The base path is derived from the repo name automatically.
 
 on:
@@ -17,13 +28,84 @@ permissions:
   pages: write
   id-token: write
 
-# Let a running deploy finish; queue the newest, drop stale ones.
+# Let a running deploy finish; queue the newest, drop stale ones. Cancelling
+# mid-`db push` would leave a migration partially applied with no history row.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
+  supabase-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Supabase secrets are configured
+        # Lets this land and merge before the one-time secret setup is done,
+        # without ever blocking the (previously working) frontend deploy that
+        # `build` depends on below. Once the two secrets are added, this
+        # flips to true and every step after it starts actually running.
+        id: check
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::SUPABASE_ACCESS_TOKEN/SUPABASE_DB_PASSWORD not set on the production environment yet — skipping migrations, function deploy, and secret sync. See the setup steps at the top of this file."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Guard against unmarked destructive migrations
+        # Same check as ci.yml, repeated here because main has no branch
+        # protection yet — this is the actual non-bypassable gate.
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          shopt -s nullglob
+          fail=0
+          for f in supabase/migrations/*.sql; do
+            base=$(basename "$f")
+            if ! [[ "$base" =~ ^[0-9]{14}_[a-zA-Z0-9_]+\.sql$ ]]; then
+              echo "::error file=$f::Migration filename must match <14-digit-timestamp>_name.sql (run \`supabase migration new <name>\`)"
+              fail=1
+            fi
+            # Strip whole-line SQL comments first so prose describing a
+            # statement (e.g. a header note explaining what was removed)
+            # can't false-positive on the keywords below.
+            if grep -v '^[[:space:]]*--' "$f" | grep -qiE '\b(drop[[:space:]]+table|drop[[:space:]]+column|drop[[:space:]]+schema|drop[[:space:]]+extension|truncate|delete[[:space:]]+from|alter[[:space:]]+column[[:space:]]+[^[:space:]]+[[:space:]]+type)\b' \
+              && ! grep -q -- '-- allow-destructive' "$f"; then
+              echo "::error file=$f::Destructive statement found (DROP TABLE/COLUMN/SCHEMA/EXTENSION, TRUNCATE, DELETE, or a column type change). Add a '-- allow-destructive' comment if this is intentional."
+              fail=1
+            fi
+          done
+          exit $fail
+      - uses: supabase/setup-cli@v3
+        if: steps.check.outputs.ready == 'true'
+        with:
+          version: 2.109.1
+      - name: Link project
+        if: steps.check.outputs.ready == 'true'
+        run: supabase link --project-ref ruolemziparsvotdzbzw --yes
+      - name: Preview pending migrations
+        if: steps.check.outputs.ready == 'true'
+        run: supabase db push --linked --dry-run
+      - name: Apply migrations
+        # Idempotent no-op when there's nothing new to apply.
+        if: steps.check.outputs.ready == 'true'
+        run: supabase db push --linked --yes
+      - name: Deploy edge functions
+        # --use-api bundles server-side instead of via Docker — faster, and
+        # removes a Docker dependency from CI. Idempotent redeploy either way.
+        if: steps.check.outputs.ready == 'true'
+        run: supabase functions deploy validate-access --use-api --yes
+      - name: Sync ALLOWED_NAMES to Supabase secrets
+        # Public list already shipped in the frontend bundle — no secrecy, so
+        # safe to sync unconditionally. Single source of truth: allowed-names.json.
+        if: steps.check.outputs.ready == 'true'
+        run: supabase secrets set ALLOWED_NAMES="$(jq -r 'join(",")' allowed-names.json)" --yes
+
   build:
+    needs: supabase-deploy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,3 +136,34 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Cut the release only after the site has actually deployed. A failed build
+  # or deploy skips this job, so the tag never moves ahead of what is live.
+  # The version is read from the conventional commits since the last tag
+  # (feat -> minor, fix -> patch, BREAKING CHANGE -> major); docs/chore-only
+  # or non-conventional pushes create no tag.
+  release:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # override the read-only default: needed to tag + release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags, so the bump can be computed
+
+      - name: Bump version and tag
+        id: tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: false
+          release_branches: main
+
+      - name: Publish GitHub release
+        if: steps.tag.outputs.new_tag != ''
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.new_tag }}
+          name: ${{ steps.tag.outputs.new_tag }}
+          body: ${{ steps.tag.outputs.changelog }}

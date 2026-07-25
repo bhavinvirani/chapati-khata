@@ -348,7 +348,7 @@ is only the arithmetic.
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `npx vitest run src/lib/split.test.ts`
-Expected: PASS, 15 tests.
+Expected: PASS, 17 tests.
 
 - [ ] **Step 7: Format, lint, typecheck**
 
@@ -765,7 +765,7 @@ Expected: PASS, 12 tests.
 - [ ] **Step 5: Run the whole suite**
 
 Run: `npm run test`
-Expected: PASS, 38 tests across three files.
+Expected: PASS, 40 tests across three files.
 
 - [ ] **Step 6: Format, lint, typecheck, then commit**
 
@@ -1679,7 +1679,7 @@ Append to `src/styles.css`:
 - [ ] **Step 8: Verify**
 
 Run: `npm run format && npm run lint && npm run typecheck && npm run test && npm run build`
-Expected: all clean, 38 tests passing.
+Expected: all clean, 40 tests passing.
 
 Then `npm run dev` and check: the composer lists the seven seeded people; typing
 a total shows "N left to allocate"; **Add** stays disabled until it reads

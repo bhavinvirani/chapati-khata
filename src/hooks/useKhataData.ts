@@ -16,7 +16,11 @@ export function useKhataData(onBooted: () => void) {
   const [checking, setChecking] = useState(true);
   const [ready, setReady] = useState(false);
 
+  // Ref: closure-stable "already loaded" check inside `load` (kept out of its
+  // deps so `load`'s identity — and the effects that depend on it — stay put).
   const historyLoadedRef = useRef(false);
+  // State: the same flag, mirrored for consumers that render off it.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,6 +107,7 @@ export function useKhataData(onBooted: () => void) {
       const pe = paidIds.length > 0 ? await db.loadPaidEntries(paidIds) : [];
       setPaidEntries(pe);
       historyLoadedRef.current = true;
+      setHistoryLoaded(true);
     } catch {
       // silent — user can retry by toggling
     } finally {
@@ -121,7 +126,10 @@ export function useKhataData(onBooted: () => void) {
       byWeek.set(e.week_start, arr);
     }
     const paidMap = new Map(weeks.map((w) => [w.week_start, w]));
-    const ids = new Set<string>([...weeks.map((w) => w.week_start), ...allEntries.map((e) => e.week_start)]);
+    const ids = new Set<string>([
+      ...weeks.map((w) => w.week_start),
+      ...allEntries.map((e) => e.week_start),
+    ]);
     const views: WeekView[] = [];
     ids.forEach((id) => {
       const es = byWeek.get(id) ?? [];
@@ -151,14 +159,28 @@ export function useKhataData(onBooted: () => void) {
       paidCount: weeks.filter((w) => w.paid).length,
     };
   }, [weekViews, weeks]);
-  const historyLoaded = historyLoadedRef.current;
 
   return {
-    weeks, entries, allEntries, logs,
-    loading, offline, checking,
-    load, markOffline,
-    hasMoreLogs, loadingMore, loadMoreLogs,
-    loadingHistory, historyLoaded, loadHistory,
-    shown, unpaid, paid, paidCount, owed, owedQty,
+    weeks,
+    entries,
+    allEntries,
+    logs,
+    loading,
+    offline,
+    checking,
+    load,
+    markOffline,
+    hasMoreLogs,
+    loadingMore,
+    loadMoreLogs,
+    loadingHistory,
+    historyLoaded,
+    loadHistory,
+    shown,
+    unpaid,
+    paid,
+    paidCount,
+    owed,
+    owedQty,
   };
 }

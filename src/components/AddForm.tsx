@@ -81,7 +81,12 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
           }}
           aria-label="Chapati count"
         />
-        <button className="btn btn-solid add-btn" disabled={busy} onClick={handleAdd} aria-label="Add entry">
+        <button
+          className="btn btn-solid add-btn"
+          disabled={busy}
+          onClick={handleAdd}
+          aria-label="Add entry"
+        >
           <IcPlus className="ic" />
           <span>Add</span>
         </button>
@@ -98,16 +103,16 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
         aria-label="Optional note"
       />
       {addErr && <div className="add-err">{addErr}</div>}
-      {!addErr && (
-        existingEntry ? (
+      {!addErr &&
+        (existingEntry ? (
           <div className="add-hint">
-            {isToday ? "Today" : dayLabel(selectedDate)} so far &middot; <b>{existingEntry.qty}</b> chapati
+            {isToday ? "Today" : dayLabel(selectedDate)} so far &middot; <b>{existingEntry.qty}</b>{" "}
+            chapati
             {existingEntry.qty !== 1 ? "s" : ""} &middot; {money(existingEntry.amount)}
           </div>
         ) : (
           <div className="add-rate">{money(DEFAULT_PRICE)} per chapati</div>
-        )
-      )}
+        ))}
     </section>
   );
 }

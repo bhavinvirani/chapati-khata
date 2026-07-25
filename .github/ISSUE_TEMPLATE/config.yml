@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Chapati Khata (live app)
+    url: https://bhavinvirani.github.io/chapati-khata/
+    about: Try to reproduce the problem here before filing an issue.
+  - name: Setup and deployment guide
+    url: https://github.com/bhavinvirani/chapati-khata#readme
+    about: Supabase setup, env vars, and deploying your own copy.

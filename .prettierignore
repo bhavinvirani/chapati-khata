@@ -1,0 +1,12 @@
+dist
+coverage
+node_modules
+package-lock.json
+.vite
+.playwright-mcp
+
+# Hand-authored dense CSS — Prettier would explode 221 lines into ~1400.
+src/styles.css
+
+# Owned by `deno fmt` + the Deno VSCode extension.
+supabase/functions/

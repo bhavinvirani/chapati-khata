@@ -14,8 +14,14 @@ interface Props {
 }
 
 export function PaidHistory({
-  paidCount, historyLoaded, loadingHistory,
-  paid, busy, onExpand, onEntry, onReopen,
+  paidCount,
+  historyLoaded,
+  loadingHistory,
+  paid,
+  busy,
+  onExpand,
+  onEntry,
+  onReopen,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -37,8 +43,8 @@ export function PaidHistory({
           History &middot; {paidCount} week{paidCount !== 1 ? "s" : ""} paid
         </span>
       </button>
-      {open && (
-        loadingHistory ? (
+      {open &&
+        (loadingHistory ? (
           <div className="history-loading">Loading history&hellip;</div>
         ) : (
           <div className="history-weeks">
@@ -59,8 +65,7 @@ export function PaidHistory({
               );
             })}
           </div>
-        )
-      )}
+        ))}
     </section>
   );
 }

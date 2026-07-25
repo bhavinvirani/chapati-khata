@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in Chapati Khata behaves incorrectly.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, and what the app did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as ...
+        2. Add 5 chapatis for ...
+        3. ...
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - Gate / sign-in
+        - Add form
+        - Ledger / week card
+        - Paid history
+        - Stats
+        - Log tab
+        - Export / backup
+        - Offline or out-of-sync data
+        - Not sure
+    validations:
+      required: false
+  - type: input
+    id: env
+    attributes:
+      label: Device and browser
+      placeholder: iPhone 14, Safari 17 / Pixel 8, Chrome 120 / macOS, Firefox 121
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: I reproduced this on the live app.
+          required: false
+        - label: This report contains no access code, no anon key, and no real names I would rather not publish.
+          required: true

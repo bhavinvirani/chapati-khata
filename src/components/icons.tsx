@@ -61,7 +61,14 @@ export const IcDownload = (p: P) => (
 export function Roti({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" fill="var(--marigold-tint)" stroke="var(--marigold-deep)" strokeWidth="1.4" />
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        fill="var(--marigold-tint)"
+        stroke="var(--marigold-deep)"
+        strokeWidth="1.4"
+      />
       <circle cx="9" cy="10" r="1.15" fill="var(--marigold-deep)" />
       <circle cx="14.5" cy="9.5" r="0.8" fill="var(--marigold-deep)" />
       <circle cx="13" cy="14.5" r="1.05" fill="var(--marigold-deep)" />

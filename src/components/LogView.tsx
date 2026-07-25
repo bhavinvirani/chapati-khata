@@ -30,14 +30,24 @@ function logText(ev: LogRow): string {
 
 function NoteChange({ before, after }: { before: string; after: string }) {
   if (!before && after) {
-    return <div className="log-note-diff">note: <span className="log-note-new">{after}</span></div>;
+    return (
+      <div className="log-note-diff">
+        note: <span className="log-note-new">{after}</span>
+      </div>
+    );
   }
   if (before && !after) {
-    return <div className="log-note-diff">note removed: <span className="log-note-old">{before}</span></div>;
+    return (
+      <div className="log-note-diff">
+        note removed: <span className="log-note-old">{before}</span>
+      </div>
+    );
   }
   return (
     <div className="log-note-diff">
-      <span className="log-note-old">{before}</span> <span className="log-note-arrow">{"\u2192"}</span> <span className="log-note-new">{after}</span>
+      <span className="log-note-old">{before}</span>{" "}
+      <span className="log-note-arrow">{"\u2192"}</span>{" "}
+      <span className="log-note-new">{after}</span>
     </div>
   );
 }
@@ -83,9 +93,11 @@ export function LogView({ logs, hasMore, loadingMore, onLoadMore }: Props) {
               <div className="log-what">
                 <b className="log-actor">{cap(ev.actor)}</b> {logText(ev)}
               </div>
-              {(ev.action === "edit" || ev.action === "add") && ev.note_before != null && ev.note_after != null && (
-                <NoteChange before={ev.note_before} after={ev.note_after} />
-              )}
+              {(ev.action === "edit" || ev.action === "add") &&
+                ev.note_before != null &&
+                ev.note_after != null && (
+                  <NoteChange before={ev.note_before} after={ev.note_after} />
+                )}
               <div className="log-when">{stamp(ev.ts)}</div>
             </div>
           </li>

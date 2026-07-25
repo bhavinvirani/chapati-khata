@@ -17,7 +17,9 @@ export function WeekCard({ w, busy, onEntry, onPay, onReopen }: Props) {
   const showYear = w.week_start.slice(0, 4) !== CURRENT_YEAR;
 
   return (
-    <section className={"week" + (w.paid ? " paid" : "") + (isCurrentWeek(w.week_start) ? " now" : "")}>
+    <section
+      className={"week" + (w.paid ? " paid" : "") + (isCurrentWeek(w.week_start) ? " now" : "")}
+    >
       <div className="perf" />
       <div className="week-head">
         <div>

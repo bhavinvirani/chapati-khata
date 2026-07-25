@@ -90,9 +90,7 @@ export function Gate({ onSubmit }: Props) {
           aria-label="Your first name"
         />
         {err === "name" && (
-          <div className="gate-err">
-            Not allowed. Check the spelling, or ask to be added.
-          </div>
+          <div className="gate-err">Not allowed. Check the spelling, or ask to be added.</div>
         )}
         <input
           className={"in gate-in gate-code" + (err === "code" || err === "locked" ? " bad" : "")}
@@ -113,26 +111,18 @@ export function Gate({ onSubmit }: Props) {
           }}
           aria-label="Access code"
         />
-        {err === "code" && (
-          <div className="gate-err">Wrong access code.</div>
-        )}
+        {err === "code" && <div className="gate-err">Wrong access code.</div>}
         {err === "locked" && (
-          <div className="gate-err">
-            Too many attempts. Try again in {countdown}s.
-          </div>
+          <div className="gate-err">Too many attempts. Try again in {countdown}s.</div>
         )}
         {err === "network" && (
-          <div className="gate-err">
-            Can't reach the server. Check your connection.
-          </div>
+          <div className="gate-err">Can't reach the server. Check your connection.</div>
         )}
         <button className="btn btn-solid wide" onClick={go} disabled={locked || loading}>
           {locked ? `Locked (${countdown}s)` : loading ? "Checking\u2026" : "Open the khata"}
         </button>
       </div>
-      <div className="gate-foot">
-        Your name is your key — keep this link between us.
-      </div>
+      <div className="gate-foot">Your name is your key — keep this link between us.</div>
     </div>
   );
 }

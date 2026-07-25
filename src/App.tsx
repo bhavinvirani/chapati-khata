@@ -25,17 +25,32 @@ import { StatsSheet } from "./components/StatsSheet";
 import { Toast } from "./components/Toast";
 import { Roti } from "./components/icons";
 
-const ENTRY_CODE = import.meta.env.VITE_ENTRY_CODE as string | undefined;
+const ENTRY_CODE = import.meta.env.VITE_ENTRY_CODE;
 
 export default function App() {
   const { user, signIn, signOut, restoreUser } = useAuth();
   const {
-    weeks, entries, allEntries, logs,
-    loading, offline, checking,
-    load, markOffline,
-    hasMoreLogs, loadingMore, loadMoreLogs,
-    loadingHistory, historyLoaded, loadHistory,
-    shown, unpaid, paid, paidCount, owed, owedQty,
+    weeks,
+    entries,
+    allEntries,
+    logs,
+    loading,
+    offline,
+    checking,
+    load,
+    markOffline,
+    hasMoreLogs,
+    loadingMore,
+    loadMoreLogs,
+    loadingHistory,
+    historyLoaded,
+    loadHistory,
+    shown,
+    unpaid,
+    paid,
+    paidCount,
+    owed,
+    owedQty,
   } = useKhataData(restoreUser);
   const { toast, flash } = useToast();
   const { confirm, setConfirm, clearConfirm } = useConfirm();
@@ -50,22 +65,25 @@ export default function App() {
 
   // ── action helpers ──
 
-  const withBusy = useCallback(async (fn: () => Promise<void>): Promise<boolean> => {
-    if (busyRef.current) return false;
-    busyRef.current = true;
-    setBusy(true);
-    try {
-      await fn();
-      await load();
-      return true;
-    } catch {
-      markOffline();
-      return false;
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }, [load, markOffline]);
+  const withBusy = useCallback(
+    async (fn: () => Promise<void>): Promise<boolean> => {
+      if (busyRef.current) return false;
+      busyRef.current = true;
+      setBusy(true);
+      try {
+        await fn();
+        await load();
+        return true;
+      } catch {
+        markOffline();
+        return false;
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    },
+    [load, markOffline],
+  );
 
   async function handleAdd(parsed: ParsedQty, note: string, date: string): Promise<boolean> {
     if (!user) return false;
@@ -74,10 +92,19 @@ export default function App() {
     const wasThere = !!existing;
     const isToday = date === todayStr();
     return withBusy(async () => {
-      await db.addToday(weekId, date, { qty: parsed.qty, price: parsed.price, note }, existing, user, device);
-      flash(wasThere
-        ? `Added to ${isToday ? "today" : dayLabel(date)}`
-        : `${isToday ? "Today" : dayLabel(date)} logged`);
+      await db.addToday(
+        weekId,
+        date,
+        { qty: parsed.qty, price: parsed.price, note },
+        existing,
+        user,
+        device,
+      );
+      flash(
+        wasThere
+          ? `Added to ${isToday ? "today" : dayLabel(date)}`
+          : `${isToday ? "Today" : dayLabel(date)} logged`,
+      );
     });
   }
 
@@ -138,7 +165,10 @@ export default function App() {
   if (checking) return <BootScreen />;
 
   if (!user) {
-    const handleGateSubmit = async (name: string, code: string): Promise<"name" | "code" | "network" | null> => {
+    const handleGateSubmit = async (
+      name: string,
+      code: string,
+    ): Promise<"name" | "code" | "network" | null> => {
       const clean = name.trim().toLowerCase();
       if (ENTRY_CODE) {
         // Local dev: validate from .env + config.ts
@@ -198,7 +228,12 @@ export default function App() {
               onSettle={() =>
                 setConfirm({
                   title: "Settle every open week?",
-                  body: "Marks all " + unpaid.length + " unpaid weeks paid — " + money(owed) + " total.",
+                  body:
+                    "Marks all " +
+                    unpaid.length +
+                    " unpaid weeks paid — " +
+                    money(owed) +
+                    " total.",
                   cta: "Mark all paid",
                   tone: "go",
                   onYes: handleSettleAll,
@@ -206,12 +241,7 @@ export default function App() {
               }
             />
 
-            <AddForm
-              entries={entries}
-              weeks={weeks}
-              busy={busy}
-              onAdd={handleAdd}
-            />
+            <AddForm entries={entries} weeks={weeks} busy={busy} onAdd={handleAdd} />
 
             {shown.length === 0 ? (
               <div className="empty">
@@ -281,7 +311,12 @@ export default function App() {
             </div>
           </main>
         ) : (
-          <LogView logs={logs} hasMore={hasMoreLogs} loadingMore={loadingMore} onLoadMore={loadMoreLogs} />
+          <LogView
+            logs={logs}
+            hasMore={hasMoreLogs}
+            loadingMore={loadingMore}
+            onLoadMore={loadMoreLogs}
+          />
         )}
       </div>
 

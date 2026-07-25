@@ -71,10 +71,7 @@ export async function loadActive(): Promise<{ weeks: Week[]; entries: Entry[]; l
 /** Fetch entries for paid weeks (called on demand when history is expanded). */
 export async function loadPaidEntries(paidWeekIds: string[]): Promise<Entry[]> {
   if (paidWeekIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from("entries")
-    .select("*")
-    .in("week_start", paidWeekIds);
+  const { data, error } = await supabase.from("entries").select("*").in("week_start", paidWeekIds);
   if (error) fail("loadPaidEntries", error);
   return (data ?? []) as Entry[];
 }
@@ -140,12 +137,19 @@ export async function addToday(
     const qty = existing.qty + add.qty;
     const amount = round2(existing.amount + delta);
     const note = [existing.note, enrichedNote].filter(Boolean).join("; ").trim();
-    const { error } = await supabase.from("entries").update({ qty, amount, note }).eq("id", existing.id);
+    const { error } = await supabase
+      .from("entries")
+      .update({ qty, amount, note })
+      .eq("id", existing.id);
     if (error) fail("addToday/update", error);
     const noteChanged = existing.note !== note;
     await logAction({
-      actor, action: "add", week_start: weekId, day,
-      qty_before: existing.qty, qty_after: qty,
+      actor,
+      action: "add",
+      week_start: weekId,
+      day,
+      qty_before: existing.qty,
+      qty_after: qty,
       note_before: noteChanged ? existing.note : null,
       note_after: noteChanged ? note : null,
       device_id: deviceId,
@@ -155,7 +159,14 @@ export async function addToday(
       .from("entries")
       .insert({ week_start: weekId, day, qty: add.qty, amount: delta, note: enrichedNote });
     if (error) fail("addToday/insert", error);
-    await logAction({ actor, action: "create", week_start: weekId, day, qty_after: add.qty, device_id: deviceId });
+    await logAction({
+      actor,
+      action: "create",
+      week_start: weekId,
+      day,
+      qty_after: add.qty,
+      device_id: deviceId,
+    });
   }
 }
 
@@ -191,17 +202,34 @@ export async function editEntry(
 export async function deleteEntry(entry: Entry, actor: string, deviceId: string): Promise<void> {
   const { error } = await supabase.from("entries").delete().eq("id", entry.id);
   if (error) fail("deleteEntry", error);
-  await logAction({ actor, action: "delete", week_start: entry.week_start, day: entry.day, qty_before: entry.qty, device_id: deviceId });
+  await logAction({
+    actor,
+    action: "delete",
+    week_start: entry.week_start,
+    day: entry.day,
+    qty_before: entry.qty,
+    device_id: deviceId,
+  });
 }
 
-export async function setPaid(weekId: string, paid: boolean, actor: string, deviceId: string): Promise<void> {
+export async function setPaid(
+  weekId: string,
+  paid: boolean,
+  actor: string,
+  deviceId: string,
+): Promise<void> {
   await ensureWeek(weekId);
   const { error } = await supabase
     .from("weeks")
     .update({ paid, paid_at: paid ? new Date().toISOString() : null })
     .eq("week_start", weekId);
   if (error) fail("setPaid", error);
-  await logAction({ actor, action: paid ? "paid" : "reopen", week_start: weekId, device_id: deviceId });
+  await logAction({
+    actor,
+    action: paid ? "paid" : "reopen",
+    week_start: weekId,
+    device_id: deviceId,
+  });
 }
 
 export async function settleAll(weekIds: string[], actor: string, deviceId: string): Promise<void> {

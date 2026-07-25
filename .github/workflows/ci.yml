@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# Superseded runs on the same PR are pointless. Distinct from deploy.yml's
+# `pages` group so the two never interfere.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test
+      - name: Build
+        env:
+          # Mirror deploy.yml so PR builds exercise the sub-path that ships.
+          # No Supabase secrets: `vite build` never executes module bodies, so
+          # a missing VITE_SUPABASE_* only yields a bundle that would fail at
+          # runtime — the compile/bundle check is unaffected. Secrets are also
+          # unavailable to fork PRs, so requiring them would make fork PRs
+          # behave differently for no benefit.
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: npm run build

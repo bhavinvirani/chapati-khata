@@ -4,8 +4,18 @@ import { money, round2 } from "../lib/util";
 import { IcX } from "./icons";
 
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 interface Props {
@@ -49,7 +59,12 @@ export function StatsSheet({ entries, onClose }: Props) {
 
     return {
       label: `${MONTHS[m - 1]} ${y}`,
-      qty, amt, ordersPerWeek, rotisPerOrder, rate, pqty,
+      qty,
+      amt,
+      ordersPerWeek,
+      rotisPerOrder,
+      rate,
+      pqty,
     };
   }, [entries, key, idx, months]);
 

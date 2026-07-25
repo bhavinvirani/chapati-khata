@@ -54,7 +54,11 @@ export function EditSheet({ entry, busy, onClose, onSave, onDelete }: Props) {
               <IcTrash className="ic sm" />
               Delete
             </button>
-            <button className="btn btn-solid" disabled={!valid || busy} onClick={() => onSave(entry, n, note)}>
+            <button
+              className="btn btn-solid"
+              disabled={!valid || busy}
+              onClick={() => onSave(entry, n, note)}
+            >
               Save changes
             </button>
           </div>

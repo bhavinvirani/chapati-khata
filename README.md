@@ -38,7 +38,7 @@ what's owed until the week is marked paid. Data lives in your own Supabase
    - **Project URL** (looks like `https://abcd1234.supabase.co`)
    - **anon public** key (a long string under "Project API keys")
 
-> These two values are *meant* to be public - they ship in the frontend. Your
+> These two values are _meant_ to be public - they ship in the frontend. Your
 > data is protected by the database rules (Row-Level Security), not by hiding the
 > key. Your **service_role** key and DB password are the real secrets - never put
 > those in this project.
@@ -128,7 +128,7 @@ Pages on every push to `main`. To turn it on:
 
 1. **Settings > Pages > Build and deployment > Source: "GitHub Actions".**
 2. Add two repo secrets under **Settings > Secrets and variables > Actions** -
-   `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the *same* two the keep-alive job uses,
+   `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the _same_ two the keep-alive job uses,
    so you only add them once). Add them **before** the first deploy.
 3. Push to `main`. The workflow derives the base path from your repo name
    (`/<repo>/`) automatically, builds, and deploys. Your site lands at

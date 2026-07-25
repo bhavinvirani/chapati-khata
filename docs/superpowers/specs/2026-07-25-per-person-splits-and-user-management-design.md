@@ -355,8 +355,8 @@ sits above the button, and **Add** is disabled unless it reads zero.
 Rows group by day. Each day shows its date and combined total; beneath it, one
 sub-row per add showing `qty @ rate` and amount. An add's per-person split is
 **collapsed by default** and expands on tap — with eight people per add, showing
-every split inline would bury the week. Tapping the add row itself opens the
-editor.
+every split inline would bury the week. Editing is a separate control on the
+add row, so expanding to look and tapping to change are never confused.
 
 Each week card also shows a **per-person subtotal for that week**. This is the
 same data one aggregation up, needs no new screen, and is what makes manual

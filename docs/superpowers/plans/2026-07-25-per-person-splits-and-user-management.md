@@ -4,7 +4,7 @@
 
 **Goal:** Split each purchase across named people, and move the login allowlist from a repo file into a database table any signed-in user can manage.
 
-**Architecture:** `entries` becomes one row per *add* (a purchase run with its own rate) instead of one row per day, with a child `entry_shares` table holding each person's qty and money. A new `users` table carries two independent switches — `in_split` and `can_login` — and replaces `allowed-names.json` as the login allowlist. All allocation, aggregation and guardrail logic lives as pure functions in `src/lib/`, which is also everything the tests cover; writes stay as plain `supabase-js` table calls in `src/lib/db.ts`.
+**Architecture:** `entries` becomes one row per _add_ (a purchase run with its own rate) instead of one row per day, with a child `entry_shares` table holding each person's qty and money. A new `users` table carries two independent switches — `in_split` and `can_login` — and replaces `allowed-names.json` as the login allowlist. All allocation, aggregation and guardrail logic lives as pure functions in `src/lib/`, which is also everything the tests cover; writes stay as plain `supabase-js` table calls in `src/lib/db.ts`.
 
 **Tech Stack:** React 18 + TypeScript + Vite, Supabase (Postgres + PostgREST + Realtime + Edge Functions on Deno), vitest, GitHub Actions.
 
@@ -31,26 +31,26 @@ Every task's requirements implicitly include this section.
 
 **New — pure logic (all tested):**
 
-| File | Responsibility |
-| --- | --- |
-| `src/lib/split.ts` | Allocation math: remainder, even split, share construction, rounding |
-| `src/lib/split.test.ts` | Tests for the above |
-| `src/lib/people.ts` | Guardrail predicates and people ordering/filtering |
-| `src/lib/people.test.ts` | Tests for the above |
-| `src/lib/aggregate.ts` | Per-person aggregation, day grouping, repair-state predicate |
-| `src/lib/aggregate.test.ts` | Tests for the above |
+| File                        | Responsibility                                                       |
+| --------------------------- | -------------------------------------------------------------------- |
+| `src/lib/split.ts`          | Allocation math: remainder, even split, share construction, rounding |
+| `src/lib/split.test.ts`     | Tests for the above                                                  |
+| `src/lib/people.ts`         | Guardrail predicates and people ordering/filtering                   |
+| `src/lib/people.test.ts`    | Tests for the above                                                  |
+| `src/lib/aggregate.ts`      | Per-person aggregation, day grouping, repair-state predicate         |
+| `src/lib/aggregate.test.ts` | Tests for the above                                                  |
 
 **New — UI:**
 
-| File | Responsibility |
-| --- | --- |
+| File                             | Responsibility                                                                                       |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `src/components/SplitEditor.tsx` | The per-person allocation widget. Shared by AddForm and EditSheet. Controlled — owns no persistence. |
-| `src/components/PeopleSheet.tsx` | People management sheet |
+| `src/components/PeopleSheet.tsx` | People management sheet                                                                              |
 
 **New — database:**
 
-| File | Responsibility |
-| --- | --- |
+| File                                            | Responsibility    |
+| ----------------------------------------------- | ----------------- |
 | `supabase/migrations/<ts>_splits_and_users.sql` | The one migration |
 
 **Modified:**
@@ -68,11 +68,13 @@ references them; all additions here are additive, so the existing code keeps
 compiling untouched.
 
 **Files:**
+
 - Modify: `src/types.ts`
 - Create: `src/lib/split.ts`
 - Test: `src/lib/split.test.ts`
 
 **Interfaces:**
+
 - Consumes: `round2` from `src/lib/util.ts`
 - Produces: types `User`, `EntryShare`, `ShareInput`, `Alloc`; functions `allocated`, `remaining`, `evenSplit`, `buildShares`, `sharesAmount`
 
@@ -340,7 +342,7 @@ export function sharesAmount(shares: ShareInput[]): number {
 ```
 
 Note the file imports only `round2` — it knows nothing about `User`. Choosing
-*who* to offer is a people question and lives in `people.ts` (Task 2); this file
+_who_ to offer is a people question and lives in `people.ts` (Task 2); this file
 is only the arithmetic.
 
 - [ ] **Step 6: Run the tests to verify they pass**
@@ -368,10 +370,12 @@ Two predicates that keep the group from locking itself out, plus the
 share-existence question that decides whether a person can be deleted outright.
 
 **Files:**
+
 - Create: `src/lib/people.ts`
 - Test: `src/lib/people.test.ts`
 
 **Interfaces:**
+
 - Consumes: `User` from `src/types.ts`
 - Produces: `canRevokeLogin(target, actorName, users)`, `canDelete(hasShares)`, `sortPeople(users)`, `splitMembers(users)`
 
@@ -549,10 +553,12 @@ Everything the display layer needs to turn rows into per-person figures, plus
 the check that spots a half-written add.
 
 **Files:**
+
 - Create: `src/lib/aggregate.ts`
 - Test: `src/lib/aggregate.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Entry`, `User` from `src/types.ts`; `round2` from `src/lib/util.ts`
 - Produces: `PersonTotal`, `perPerson(entries)`, `groupByDay(entries)`, `needsRepair(entry)`, `nameOf(users, userId)`
 
@@ -774,10 +780,12 @@ git commit -m "feat: add per-person aggregation and repair detection"
 ## Task 4: Database migration
 
 **Files:**
+
 - Create: `supabase/migrations/<timestamp>_splits_and_users.sql`
 - Modify: `supabase/schema.sql`
 
 **Interfaces:**
+
 - Produces: tables `users`, `entry_shares`; columns `entries.rate`, `logs.target`
 
 - [ ] **Step 1: Create the migration file with the correct name**
@@ -966,6 +974,7 @@ the database and the repo file is gone, while the ledger still behaves exactly
 as before.
 
 **Files:**
+
 - Modify: `supabase/functions/validate-access/index.ts`
 - Modify: `supabase/functions/validate-access/deno.json`
 - Modify: `src/lib/db.ts` (add two functions only)
@@ -976,6 +985,7 @@ as before.
 - Delete: `allowed-names.json`
 
 **Interfaces:**
+
 - Consumes: the `users` table from Task 4
 - Produces: `db.loadUsers(): Promise<User[]>`, `db.nameCanLogin(name: string): Promise<boolean>`
 
@@ -1006,34 +1016,34 @@ Then replace the entire `── validate name against allowlist ──` block (t
 section) with:
 
 ```ts
-    // ── validate name against the users table ──
-    // Needs the service-role key, not the publishable one: the gate runs
-    // before there is a session for RLS to authorise against.
-    const url = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!url || !serviceKey) {
-      // Fail closed, exactly as a missing ENTRY_CODE does.
-      return Response.json({ ok: false, error: "config" }, { status: 500 });
-    }
+// ── validate name against the users table ──
+// Needs the service-role key, not the publishable one: the gate runs
+// before there is a session for RLS to authorise against.
+const url = Deno.env.get("SUPABASE_URL");
+const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+if (!url || !serviceKey) {
+  // Fail closed, exactly as a missing ENTRY_CODE does.
+  return Response.json({ ok: false, error: "config" }, { status: 500 });
+}
 
-    if (!clean) {
-      return Response.json({ ok: false, error: "name" });
-    }
+if (!clean) {
+  return Response.json({ ok: false, error: "name" });
+}
 
-    const admin = createClient(url, serviceKey);
-    const { data, error } = await admin
-      .from("users")
-      .select("id")
-      .eq("name", clean)
-      .eq("can_login", true)
-      .limit(1);
+const admin = createClient(url, serviceKey);
+const { data, error } = await admin
+  .from("users")
+  .select("id")
+  .eq("name", clean)
+  .eq("can_login", true)
+  .limit(1);
 
-    if (error) {
-      return Response.json({ ok: false, error: "config" }, { status: 500 });
-    }
-    if (!data || data.length === 0) {
-      return Response.json({ ok: false, error: "name" });
-    }
+if (error) {
+  return Response.json({ ok: false, error: "config" }, { status: 500 });
+}
+if (!data || data.length === 0) {
+  return Response.json({ ok: false, error: "name" });
+}
 ```
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected into every Supabase
@@ -1155,6 +1165,7 @@ The vertical slice that makes a split entry possible: read shares, write an add
 with its allocation, and the widget for entering one.
 
 **Files:**
+
 - Modify: `src/lib/db.ts`
 - Modify: `src/hooks/useKhataData.ts`
 - Create: `src/components/SplitEditor.tsx`
@@ -1163,6 +1174,7 @@ with its allocation, and the widget for entering one.
 - Modify: `src/styles.css`
 
 **Interfaces:**
+
 - Consumes: `buildShares`, `sharesAmount`, `evenSplit`, `remaining`, `Alloc`, `ShareInput` (Task 1); `splitMembers` (Task 2); `loadUsers` (Task 5)
 - Produces: `db.addEntry(weekId, day, input, actor, deviceId)` where `input` is `{ qty: number; rate: number; note: string; shares: ShareInput[] }`; `useKhataData` now returns `users: User[]`; `<SplitEditor>` props below
 
@@ -1334,7 +1346,14 @@ export function SplitEditor({ members, total, rows, onChange, lastAdd, disabled 
         <button
           className="btn btn-ghost split-fill"
           disabled={disabled || total <= 0 || members.length === 0}
-          onClick={() => onChange(evenSplit(total, members.map((m) => m.id)))}
+          onClick={() =>
+            onChange(
+              evenSplit(
+                total,
+                members.map((m) => m.id),
+              ),
+            )
+          }
         >
           Even split
         </button>
@@ -1480,10 +1499,7 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
       return;
     }
     const note = noteRaw.trim().slice(0, 60);
-    const ok = await onAdd(
-      { qty: parsed.qty, rate: parsed.price, note, shares },
-      selectedDate,
-    );
+    const ok = await onAdd({ qty: parsed.qty, rate: parsed.price, note, shares }, selectedDate);
     if (ok) {
       setQtyRaw("");
       setNoteRaw("");
@@ -1576,18 +1592,18 @@ In `src/App.tsx`, pull `users` out of `useKhataData()`, replace `handleAdd`, and
 pass `users` to `<AddForm>`:
 
 ```tsx
-  async function handleAdd(
-    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
-    date: string,
-  ): Promise<boolean> {
-    if (!user) return false;
-    const weekId = weekIdOf(date);
-    const isToday = date === todayStr();
-    return withBusy(async () => {
-      await db.addEntry(weekId, date, input, user, device);
-      flash(`${isToday ? "Today" : dayLabel(date)} logged`);
-    });
-  }
+async function handleAdd(
+  input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+  date: string,
+): Promise<boolean> {
+  if (!user) return false;
+  const weekId = weekIdOf(date);
+  const isToday = date === todayStr();
+  return withBusy(async () => {
+    await db.addEntry(weekId, date, input, user, device);
+    flash(`${isToday ? "Today" : dayLabel(date)} logged`);
+  });
+}
 ```
 
 Update the import line from `import type { ParsedQty } from "./lib/util";` to
@@ -1600,17 +1616,64 @@ Append to `src/styles.css`:
 
 ```css
 /* ── split composer ── */
-.split{ margin-top:10px; }
-.split-fills{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
-.btn.split-fill{ padding:8px 12px; font-size:13px; min-height:36px; border-radius:10px; }
-.split-rows{ list-style:none; padding:0; display:flex; flex-direction:column; gap:6px; }
-.split-row{ display:flex; align-items:center; gap:10px; }
-.split-name{ flex:1; font-size:14.5px; color:var(--ink); }
-.in.split-qty{ width:78px; flex-shrink:0; text-align:center; font-family:var(--mono); font-weight:700; padding:9px 8px; }
-.split-left{ margin-top:10px; font-size:13px; font-weight:700; color:var(--soft); font-family:var(--mono); }
-.split-left.ok{ color:var(--herb); }
-.split-left.over{ color:var(--brick); }
-.split-empty{ font-size:13px; color:var(--soft); padding:8px 2px; }
+.split {
+  margin-top: 10px;
+}
+.split-fills {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.btn.split-fill {
+  padding: 8px 12px;
+  font-size: 13px;
+  min-height: 36px;
+  border-radius: 10px;
+}
+.split-rows {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.split-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.split-name {
+  flex: 1;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+.in.split-qty {
+  width: 78px;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-weight: 700;
+  padding: 9px 8px;
+}
+.split-left {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--soft);
+  font-family: var(--mono);
+}
+.split-left.ok {
+  color: var(--herb);
+}
+.split-left.over {
+  color: var(--brick);
+}
+.split-empty {
+  font-size: 13px;
+  color: var(--soft);
+  padding: 8px 2px;
+}
 ```
 
 - [ ] **Step 8: Verify**
@@ -1635,11 +1698,13 @@ git commit -m "feat: split each add across people when logging an entry"
 ## Task 7: Editing and deleting an add
 
 **Files:**
+
 - Modify: `src/lib/db.ts`
 - Modify: `src/components/EditSheet.tsx`
 - Modify: `src/App.tsx`
 
 **Interfaces:**
+
 - Consumes: `buildShares`, `remaining` (Task 1); `splitMembers` (Task 2); `EntryInput` and `SplitEditor` (Task 6)
 - Produces: `db.editEntry(entry, input, actor, deviceId)`; `deleteEntry` keeps its signature
 
@@ -1663,11 +1728,12 @@ export async function editEntry(
   actor: string,
   deviceId: string,
 ): Promise<void> {
-  const { error: upErr } = await supabase
-    .from("entry_shares")
-    .upsert(input.shares.map((s) => ({ ...s, entry_id: entry.id })), {
+  const { error: upErr } = await supabase.from("entry_shares").upsert(
+    input.shares.map((s) => ({ ...s, entry_id: entry.id })),
+    {
       onConflict: "entry_id,user_id",
-    });
+    },
+  );
   if (upErr) fail("editEntry/shares", upErr);
 
   // Prune anyone dropped from the allocation. `keep` is never empty in practice
@@ -1847,17 +1913,17 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
 - [ ] **Step 3: Rewire App.tsx's save handler**
 
 ```tsx
-  async function handleSaveEdit(
-    entry: Entry,
-    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
-  ) {
-    if (!user) return;
-    await withBusy(async () => {
-      await db.editEntry(entry, { ...input, note: input.note.trim() }, user, device);
-      setEditing(null);
-      flash("Entry updated");
-    });
-  }
+async function handleSaveEdit(
+  entry: Entry,
+  input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+) {
+  if (!user) return;
+  await withBusy(async () => {
+    await db.editEntry(entry, { ...input, note: input.note.trim() }, user, device);
+    setEditing(null);
+    flash("Entry updated");
+  });
+}
 ```
 
 And pass users to the sheet: `<EditSheet entry={editing} users={users} busy={busy} ... />`.
@@ -1886,12 +1952,14 @@ Days group their adds, splits are visible, each week carries a per-person
 subtotal, and a half-written add offers to be repaired.
 
 **Files:**
+
 - Modify: `src/components/WeekCard.tsx`
 - Modify: `src/hooks/useKhataData.ts`
 - Modify: `src/App.tsx`
 - Modify: `src/styles.css`
 
 **Interfaces:**
+
 - Consumes: `groupByDay`, `perPerson`, `needsRepair`, `nameOf` (Task 3)
 - Produces: `<WeekCard>` gains `users` and `onDiscard` props
 
@@ -1998,7 +2066,11 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
                         <button className="link" disabled={busy} onClick={() => onEntry(e)}>
                           Finish split
                         </button>
-                        <button className="link danger" disabled={busy} onClick={() => onDiscard(e)}>
+                        <button
+                          className="link danger"
+                          disabled={busy}
+                          onClick={() => onDiscard(e)}
+                        >
                           Discard
                         </button>
                       </div>
@@ -2062,15 +2134,15 @@ add `User` to its type import, and pass both down on the `<WeekCard>` it
 renders:
 
 ```tsx
-                  <WeekCard
-                    w={w}
-                    users={users}
-                    busy={busy}
-                    onEntry={onEntry}
-                    onDiscard={() => {}}
-                    onPay={() => {}}
-                    onReopen={() => onReopen(w.week_start)}
-                  />
+<WeekCard
+  w={w}
+  users={users}
+  busy={busy}
+  onEntry={onEntry}
+  onDiscard={() => {}}
+  onPay={() => {}}
+  onReopen={() => onReopen(w.week_start)}
+/>
 ```
 
 `onDiscard` is a no-op there: a paid week's adds are locked, so the repair
@@ -2091,24 +2163,105 @@ Append to `src/styles.css`:
 
 ```css
 /* ── day / add / share rows ── */
-.day{ border-top:1px dashed var(--line); padding:8px 8px 10px; }
-.day-head{ display:flex; align-items:baseline; gap:10px; }
-.day-tot{ flex:1; font-size:13px; color:var(--soft); }
-.add-line{ position:relative; margin:6px 0 0 78px; padding-right:40px; }
-.add-line-main{ display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; background:none; padding:6px 0; min-height:36px; }
-.add-line-qty{ font-family:var(--mono); font-size:14px; color:var(--ink); flex:1; }
-.add-line-edit{ position:absolute; top:2px; right:0; }
-.add-line.broken{ background:var(--brick-tint); border-radius:8px; padding:4px 8px; }
-.repair{ font-size:12.5px; color:var(--brick); padding:4px 0 6px; }
-.repair-a{ display:flex; gap:14px; margin-top:4px; }
-.link.danger{ color:var(--brick); }
-.share-rows{ list-style:none; padding:4px 0 2px; display:flex; flex-direction:column; gap:4px; }
-.share-row{ display:flex; align-items:baseline; gap:10px; font-size:13px; }
-.share-name{ flex:1; color:var(--soft); }
-.share-qty{ font-family:var(--mono); color:var(--ink); width:32px; text-align:right; }
-.share-amt{ font-family:var(--mono); color:var(--ink); width:60px; text-align:right; }
-.week-people{ border-top:1px dashed var(--line); padding:10px 16px; }
-.week-people-t{ font-size:11.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); margin-bottom:6px; }
+.day {
+  border-top: 1px dashed var(--line);
+  padding: 8px 8px 10px;
+}
+.day-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.day-tot {
+  flex: 1;
+  font-size: 13px;
+  color: var(--soft);
+}
+.add-line {
+  position: relative;
+  margin: 6px 0 0 78px;
+  padding-right: 40px;
+}
+.add-line-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  padding: 6px 0;
+  min-height: 36px;
+}
+.add-line-qty {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink);
+  flex: 1;
+}
+.add-line-edit {
+  position: absolute;
+  top: 2px;
+  right: 0;
+}
+.add-line.broken {
+  background: var(--brick-tint);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.repair {
+  font-size: 12.5px;
+  color: var(--brick);
+  padding: 4px 0 6px;
+}
+.repair-a {
+  display: flex;
+  gap: 14px;
+  margin-top: 4px;
+}
+.link.danger {
+  color: var(--brick);
+}
+.share-rows {
+  list-style: none;
+  padding: 4px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.share-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+}
+.share-name {
+  flex: 1;
+  color: var(--soft);
+}
+.share-qty {
+  font-family: var(--mono);
+  color: var(--ink);
+  width: 32px;
+  text-align: right;
+}
+.share-amt {
+  font-family: var(--mono);
+  color: var(--ink);
+  width: 60px;
+  text-align: right;
+}
+.week-people {
+  border-top: 1px dashed var(--line);
+  padding: 10px 16px;
+}
+.week-people-t {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
 ```
 
 - [ ] **Step 5: Verify**
@@ -2133,6 +2286,7 @@ git commit -m "feat: show days, adds and per-person totals in the ledger"
 ## Task 9: People management
 
 **Files:**
+
 - Modify: `src/lib/db.ts`
 - Create: `src/components/PeopleSheet.tsx`
 - Modify: `src/components/Header.tsx`
@@ -2141,6 +2295,7 @@ git commit -m "feat: show days, adds and per-person totals in the ledger"
 - Modify: `src/styles.css`
 
 **Interfaces:**
+
 - Consumes: `canDelete`, `canRevokeLogin`, `sortPeople` (Task 2)
 - Produces: `db.addPerson`, `db.setPersonFlag`, `db.deletePerson`, `db.hasShares`
 
@@ -2244,15 +2399,7 @@ interface Props {
   deviceId: string;
 }
 
-export function PeopleSheet({
-  users,
-  actor,
-  busy,
-  onClose,
-  onChanged,
-  onError,
-  deviceId,
-}: Props) {
+export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, deviceId }: Props) {
   const [newName, setNewName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<User | null>(null);
   const [working, setWorking] = useState(false);
@@ -2325,9 +2472,7 @@ export function PeopleSheet({
                   checked={u.in_split}
                   disabled={locked}
                   onChange={(e) =>
-                    run(() =>
-                      db.setPersonFlag(u, "in_split", e.target.checked, actor, deviceId),
-                    )
+                    run(() => db.setPersonFlag(u, "in_split", e.target.checked, actor, deviceId))
                   }
                   aria-label={`${u.name} in split`}
                 />
@@ -2345,9 +2490,7 @@ export function PeopleSheet({
                       : undefined
                   }
                   onChange={(e) =>
-                    run(() =>
-                      db.setPersonFlag(u, "can_login", e.target.checked, actor, deviceId),
-                    )
+                    run(() => db.setPersonFlag(u, "can_login", e.target.checked, actor, deviceId))
                   }
                   aria-label={`${u.name} can log in`}
                 />
@@ -2376,16 +2519,18 @@ export function PeopleSheet({
             onChange={(e) => setNewName(e.target.value)}
             aria-label="New person's first name"
           />
-          <button className="btn btn-solid" disabled={locked || !newName.trim()} onClick={handleAdd}>
+          <button
+            className="btn btn-solid"
+            disabled={locked || !newName.trim()}
+            onClick={handleAdd}
+          >
             Add
           </button>
         </div>
 
         {pendingDelete && (
           <div className="del-confirm">
-            <span>
-              Delete {cap(pendingDelete.name)}? They have no entries, so nothing is lost.
-            </span>
+            <span>Delete {cap(pendingDelete.name)}? They have no entries, so nothing is lost.</span>
             <div className="sheet-a">
               <button className="btn btn-ghost" onClick={() => setPendingDelete(null)}>
                 Keep
@@ -2407,9 +2552,9 @@ export function PeopleSheet({
         )}
 
         <div className="ppl-note">
-          Turning off <b>In split</b> keeps someone's history and their access, but stops
-          offering them when you add an entry. Turning off <b>Can log in</b> removes their
-          access. Neither ever changes a past entry.
+          Turning off <b>In split</b> keeps someone's history and their access, but stops offering
+          them when you add an entry. Turning off <b>Can log in</b> removes their access. Neither
+          ever changes a past entry.
         </div>
       </div>
     </div>
@@ -2423,9 +2568,9 @@ In `src/components/Header.tsx`, add `onPeopleClick: () => void;` to `Props`,
 accept it, import `IcPeople`, and add a button before the export button:
 
 ```tsx
-        <button className="icon-btn" onClick={onPeopleClick} aria-label="People">
-          <IcPeople className="ic" />
-        </button>
+<button className="icon-btn" onClick={onPeopleClick} aria-label="People">
+  <IcPeople className="ic" />
+</button>
 ```
 
 In `src/App.tsx`: add `const [showPeople, setShowPeople] = useState(false);`,
@@ -2433,17 +2578,19 @@ pass `onPeopleClick={() => setShowPeople(true)}` to `<Header>`, and render the
 sheet next to the others:
 
 ```tsx
-      {showPeople && user && (
-        <PeopleSheet
-          users={users}
-          actor={user}
-          busy={busy}
-          deviceId={device}
-          onClose={() => setShowPeople(false)}
-          onChanged={load}
-          onError={flash}
-        />
-      )}
+{
+  showPeople && user && (
+    <PeopleSheet
+      users={users}
+      actor={user}
+      busy={busy}
+      deviceId={device}
+      onClose={() => setShowPeople(false)}
+      onChanged={load}
+      onError={flash}
+    />
+  );
+}
 ```
 
 - [ ] **Step 5: Style it**
@@ -2452,13 +2599,51 @@ Append to `src/styles.css`:
 
 ```css
 /* ── people sheet ── */
-.ppl-legend{ display:flex; justify-content:flex-end; gap:22px; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); padding-right:44px; margin-bottom:6px; }
-.ppl{ list-style:none; padding:0; display:flex; flex-direction:column; }
-.ppl-row{ display:flex; align-items:center; gap:18px; padding:9px 0; border-top:1px dashed var(--line); min-height:44px; }
-.ppl-name{ flex:1; font-size:15px; }
-.ppl-box{ width:20px; height:20px; accent-color:var(--marigold); flex-shrink:0; }
-.ppl-box:disabled{ opacity:.4; }
-.ppl-note{ margin-top:14px; font-size:12.5px; color:var(--soft); line-height:1.5; }
+.ppl-legend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 22px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding-right: 44px;
+  margin-bottom: 6px;
+}
+.ppl {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ppl-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 9px 0;
+  border-top: 1px dashed var(--line);
+  min-height: 44px;
+}
+.ppl-name {
+  flex: 1;
+  font-size: 15px;
+}
+.ppl-box {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--marigold);
+  flex-shrink: 0;
+}
+.ppl-box:disabled {
+  opacity: 0.4;
+}
+.ppl-note {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--soft);
+  line-height: 1.5;
+}
 ```
 
 - [ ] **Step 6: Verify**
@@ -2467,6 +2652,7 @@ Run: `npm run format && npm run lint && npm run typecheck && npm run test && npm
 Expected: all clean.
 
 Then `npm run dev` and check each rule by hand:
+
 - adding a person makes them appear in the composer immediately
 - turning off **In split** removes them from the composer but they can still log in
 - your own **Can log in** box is disabled with an explanatory tooltip
@@ -2486,11 +2672,13 @@ git commit -m "feat: manage people from inside the app"
 ## Task 10: Per-person stats
 
 **Files:**
+
 - Modify: `src/components/StatsSheet.tsx`
 - Modify: `src/App.tsx`
 - Modify: `src/styles.css`
 
 **Interfaces:**
+
 - Consumes: `perPerson`, `nameOf` (Task 3)
 - Produces: `<StatsSheet>` gains a `users` prop
 
@@ -2509,46 +2697,46 @@ import { cap, money, round2 } from "../lib/util";
 Add two memos after the existing `stats` memo:
 
 ```tsx
-  const monthPeople = useMemo(
-    () => (key ? perPerson(entries.filter((e) => e.day.slice(0, 7) === key)) : []),
-    [entries, key],
-  );
+const monthPeople = useMemo(
+  () => (key ? perPerson(entries.filter((e) => e.day.slice(0, 7) === key)) : []),
+  [entries, key],
+);
 
-  const lifetime = useMemo(() => perPerson(entries), [entries]);
+const lifetime = useMemo(() => perPerson(entries), [entries]);
 ```
 
 Then insert this block after the closing `</div>` of `.stats-grid`, inside the
 sheet:
 
 ```tsx
-        {monthPeople.length > 0 && (
-          <div className="stats-people">
-            <div className="week-people-t">This month, per person</div>
-            <ul className="share-rows">
-              {monthPeople.map((p) => (
-                <li key={p.userId} className="share-row">
-                  <span className="share-name">{cap(nameOf(users, p.userId))}</span>
-                  <span className="share-qty">{p.qty}</span>
-                  <span className="share-amt">{money(p.amount)}</span>
-                  <span className="share-rate">
-                    {money(p.qty > 0 ? round2(p.amount / p.qty) : 0)}/ea
-                  </span>
-                </li>
-              ))}
-            </ul>
+{
+  monthPeople.length > 0 && (
+    <div className="stats-people">
+      <div className="week-people-t">This month, per person</div>
+      <ul className="share-rows">
+        {monthPeople.map((p) => (
+          <li key={p.userId} className="share-row">
+            <span className="share-name">{cap(nameOf(users, p.userId))}</span>
+            <span className="share-qty">{p.qty}</span>
+            <span className="share-amt">{money(p.amount)}</span>
+            <span className="share-rate">{money(p.qty > 0 ? round2(p.amount / p.qty) : 0)}/ea</span>
+          </li>
+        ))}
+      </ul>
 
-            <div className="week-people-t stats-life">Lifetime</div>
-            <ul className="share-rows">
-              {lifetime.map((p) => (
-                <li key={p.userId} className="share-row">
-                  <span className="share-name">{cap(nameOf(users, p.userId))}</span>
-                  <span className="share-qty">{p.qty}</span>
-                  <span className="share-amt">{money(p.amount)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+      <div className="week-people-t stats-life">Lifetime</div>
+      <ul className="share-rows">
+        {lifetime.map((p) => (
+          <li key={p.userId} className="share-row">
+            <span className="share-name">{cap(nameOf(users, p.userId))}</span>
+            <span className="share-qty">{p.qty}</span>
+            <span className="share-amt">{money(p.amount)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 2: Pass users in**
@@ -2561,9 +2749,19 @@ In `src/App.tsx`:
 Append to `src/styles.css`:
 
 ```css
-.stats-people{ margin-top:18px; }
-.stats-life{ margin-top:16px; }
-.share-rate{ font-family:var(--mono); color:var(--faint); font-size:12px; width:62px; text-align:right; }
+.stats-people {
+  margin-top: 18px;
+}
+.stats-life {
+  margin-top: 16px;
+}
+.share-rate {
+  font-family: var(--mono);
+  color: var(--faint);
+  font-size: 12px;
+  width: 62px;
+  text-align: right;
+}
 ```
 
 - [ ] **Step 4: Verify, then commit**
@@ -2585,10 +2783,12 @@ git commit -m "feat: add per-person figures to monthly stats"
 ## Task 11: Log actions and backup
 
 **Files:**
+
 - Modify: `src/components/LogView.tsx`
 - Modify: `src/App.tsx`
 
 **Interfaces:**
+
 - Consumes: the extended `LogAction` union (Task 1), `logs.target` (Task 4)
 
 - [ ] **Step 1: Render the people actions**
@@ -2625,7 +2825,9 @@ Add a colour for the new dot class in `src/styles.css`, next to the existing
 `.c-*` rules:
 
 ```css
-.log-dot.c-people{ background:var(--herb); }
+.log-dot.c-people {
+  background: var(--herb);
+}
 ```
 
 - [ ] **Step 2: Include the new tables in the backup**
@@ -2634,7 +2836,7 @@ In `src/App.tsx`'s `exportJSON`, add `users` to the payload. `entries` already
 carries `entry_shares` embedded from the read path, so shares travel with it:
 
 ```tsx
-    const payload = { exported_at: new Date().toISOString(), weeks, users, entries, logs };
+const payload = { exported_at: new Date().toISOString(), weeks, users, entries, logs };
 ```
 
 - [ ] **Step 3: Verify**
@@ -2660,10 +2862,10 @@ git commit -m "feat: log people changes and include them in backups"
 Not part of the tasks above. Do these deliberately, in this order.
 
 - [ ] **1. Open the PR and let CI pass.** `ci.yml` runs the migration lint,
-  typecheck, lint, format check, tests and a build. Everything must be green.
+      typecheck, lint, format check, tests and a build. Everything must be green.
 
 - [ ] **2. Wipe the data.** In the Supabase SQL editor, immediately before
-  merging. Irreversible.
+      merging. Irreversible.
 
 ```sql
 delete from public.weeks;   -- cascades entries
@@ -2676,11 +2878,11 @@ would be a `delete from`, which the CI guard blocks without an
 re-validated on every run to describe a one-time act.
 
 - [ ] **3. Merge to `main`.** `deploy.yml` applies the migration, redeploys the
-  edge function, builds and publishes the site, then tags a release.
+      edge function, builds and publishes the site, then tags a release.
 
 - [ ] **4. Verify production login.** Sign in with a seeded name. If the gate
-  rejects everyone, the edge function is not reaching the database — check the
-  function logs for a `config` error before touching anything else.
+      rejects everyone, the edge function is not reaching the database — check the
+      function logs for a `config` error before touching anything else.
 
 - [ ] **5. Delete the `ALLOWED_NAMES` secret** from the Supabase dashboard.
-  Nothing reads it any more.
+      Nothing reads it any more.

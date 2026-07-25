@@ -10,3 +10,6 @@ src/styles.css
 
 # Owned by `deno fmt` + the Deno VSCode extension.
 supabase/functions/
+
+# SDD scratch — git-ignored working notes, not project content.
+.superpowers/

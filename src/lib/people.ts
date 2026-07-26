@@ -27,6 +27,25 @@ export function canDelete(hasShares: boolean): boolean {
 }
 
 /**
+ * May this person be deleted outright?
+ *
+ * Deleting a row removes the name the gate matches on, so deletion is a strict
+ * superset of clearing `can_login` and must clear the same two guardrails —
+ * this is where they were once missed. Holding no shares is necessary but not
+ * sufficient.
+ */
+export function canDeletePerson(
+  target: User,
+  actorName: string,
+  users: User[],
+  hasShares: boolean,
+): boolean {
+  if (!canDelete(hasShares)) return false;
+  if (target.can_login && !canRevokeLogin(target, actorName, users)) return false;
+  return true;
+}
+
+/**
  * People in stable display order: oldest first, so additions append.
  *
  * Name breaks ties, and ties are the normal case rather than an edge one: the

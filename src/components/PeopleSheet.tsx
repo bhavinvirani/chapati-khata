@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { User } from "../types";
-import { canDelete, canRevokeLogin, sortPeople } from "../lib/people";
+import { canDeletePerson, canRevokeLogin, sortPeople } from "../lib/people";
 import * as db from "../lib/db";
 import { cap, normalizeName } from "../lib/util";
 import { IcTrash, IcX } from "./icons";
@@ -18,6 +18,10 @@ interface Props {
 export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, deviceId }: Props) {
   const [newName, setNewName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<User | null>(null);
+  // The `hasShares` result askDelete already paid a network call for, held
+  // alongside the pending person so the confirm button can re-run
+  // canDeletePerson without re-fetching it.
+  const [pendingHeld, setPendingHeld] = useState(false);
   const [working, setWorking] = useState(false);
   const people = sortPeople(users);
 
@@ -55,6 +59,10 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
    * matches on, so it is a strict superset of clearing `can_login`. Without it
    * the sole login-holder — who, if they are out of the split, holds zero
    * shares forever — could delete themselves and lock the group out entirely.
+   *
+   * `canDeletePerson` is the single source of truth for the yes/no; the two
+   * branches below exist only to say *why* it was no, which a single boolean
+   * can't do on its own.
    */
   async function askDelete(u: User) {
     if (u.can_login && !canRevokeLogin(u, actor, users)) {
@@ -72,11 +80,12 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
       onError("Could not check that. Check your connection.");
       return;
     }
-    if (!canDelete(held)) {
+    if (!canDeletePerson(u, actor, users, held)) {
       onError(`${cap(u.name)} appears in past entries and cannot be deleted.`);
       return;
     }
     setPendingDelete(u);
+    setPendingHeld(held);
   }
 
   const locked = busy || working;
@@ -189,12 +198,23 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
               <button
                 className="btn btn-danger"
                 disabled={locked}
-                onClick={() =>
+                onClick={() => {
+                  // `askDelete`'s check is stale by the time this fires — the
+                  // confirm card sits open long enough for another device to
+                  // revoke a login out from under it. Re-run the same
+                  // authority against the current `users` before writing.
+                  if (!canDeletePerson(pendingDelete, actor, users, pendingHeld)) {
+                    setPendingDelete(null);
+                    onError(
+                      `${cap(pendingDelete.name)} can no longer be deleted — access changed while this was open.`,
+                    );
+                    return;
+                  }
                   run(async () => {
                     await db.deletePerson(pendingDelete, actor, deviceId);
                     setPendingDelete(null);
-                  })
-                }
+                  });
+                }}
               >
                 Delete
               </button>

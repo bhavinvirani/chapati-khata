@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { User } from "../types";
-import { canDelete, canRevokeLogin, sortPeople, splitMembers } from "./people";
+import { canDelete, canDeletePerson, canRevokeLogin, sortPeople, splitMembers } from "./people";
 
 function user(name: string, over: Partial<User> = {}): User {
   return {
@@ -47,6 +47,37 @@ describe("canDelete", () => {
 
   it("refuses to delete a person who appears in history", () => {
     expect(canDelete(true)).toBe(false);
+  });
+});
+
+describe("canDeletePerson", () => {
+  // This is the composition PeopleSheet got wrong once: the delete path
+  // checked only canDelete and missed the login guardrails entirely. These
+  // cases pin down that both are enforced together, not just each alone.
+
+  it("refuses a share-holder, regardless of login state", () => {
+    const users = [user("bhavin"), user("deven"), user("parth")];
+    expect(canDeletePerson(users[1], "bhavin", users, true)).toBe(false);
+  });
+
+  it("refuses the actor themselves even when they hold no shares", () => {
+    const users = [user("bhavin"), user("deven")];
+    expect(canDeletePerson(users[0], "bhavin", users, false)).toBe(false);
+  });
+
+  it("refuses the last login-holder even when they hold no shares", () => {
+    const users = [user("bhavin"), user("deven", { can_login: false })];
+    expect(canDeletePerson(users[0], "deven", users, false)).toBe(false);
+  });
+
+  it("allows deleting a person who cannot log in and holds no shares", () => {
+    const users = [user("bhavin"), user("samir", { can_login: false })];
+    expect(canDeletePerson(users[1], "bhavin", users, false)).toBe(true);
+  });
+
+  it("allows deleting an ordinary, non-last, non-self login-holder with no shares", () => {
+    const users = [user("bhavin"), user("deven"), user("parth")];
+    expect(canDeletePerson(users[1], "bhavin", users, false)).toBe(true);
   });
 });
 

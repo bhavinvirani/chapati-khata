@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Entry, User, WeekView } from "../types";
-import { groupByDay, nameOf, needsRepair, perPerson } from "../lib/aggregate";
+import { groupByDay, nameOf, needsRepair, otherQty, perPerson } from "../lib/aggregate";
 import { cap, dayLabel, isCurrentWeek, money, stamp, weekLabel } from "../lib/util";
 import { IcCheck, IcLock, IcPencil } from "./icons";
 
@@ -18,8 +18,10 @@ const CURRENT_YEAR = String(new Date().getFullYear());
 
 export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }: Props) {
   const [openAdd, setOpenAdd] = useState<string | null>(null);
+  const [openDay, setOpenDay] = useState<string | null>(null);
   const days = groupByDay(w.entries);
   const people = perPerson(w.entries);
+  const weekOther = otherQty(w.entries);
   const showYear = w.week_start.slice(0, 4) !== CURRENT_YEAR;
 
   return (
@@ -54,13 +56,36 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
       <ul className="rows">
         {days.map((d) => (
           <li key={d.day} className="day">
-            <div className="day-head">
+            <button
+              className="day-head"
+              onClick={() => setOpenDay(openDay === d.day ? null : d.day)}
+              aria-expanded={openDay === d.day}
+            >
               <span className="row-day">{dayLabel(d.day)}</span>
               <span className="day-tot">
                 {d.qty} chapati{d.qty !== 1 ? "s" : ""}
               </span>
               <span className="row-amt">{money(d.amount)}</span>
-            </div>
+            </button>
+
+            {openDay === d.day && (
+              <ul className="share-rows day-people">
+                {perPerson(d.adds).map((pp) => (
+                  <li key={pp.userId} className="share-row">
+                    <span className="share-name">{cap(nameOf(users, pp.userId))}</span>
+                    <span className="share-qty">{pp.qty}</span>
+                    <span className="share-amt">{money(pp.amount)}</span>
+                  </li>
+                ))}
+                {otherQty(d.adds) > 0 && (
+                  <li className="share-row share-other">
+                    <span className="share-name">Others</span>
+                    <span className="share-qty">{otherQty(d.adds)}</span>
+                    <span className="share-amt">&mdash;</span>
+                  </li>
+                )}
+              </ul>
+            )}
 
             {d.adds.map((e) => {
               const broken = needsRepair(e);
@@ -135,7 +160,7 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
         ))}
       </ul>
 
-      {people.length > 0 && (
+      {(people.length > 0 || weekOther > 0) && (
         <div className="week-people">
           <div className="week-people-t">Per person this week</div>
           <ul className="share-rows">
@@ -146,6 +171,13 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
                 <span className="share-amt">{money(p.amount)}</span>
               </li>
             ))}
+            {weekOther > 0 && (
+              <li className="share-row share-other">
+                <span className="share-name">Others</span>
+                <span className="share-qty">{weekOther}</span>
+                <span className="share-amt">&mdash;</span>
+              </li>
+            )}
           </ul>
         </div>
       )}

@@ -148,6 +148,8 @@ async function ensureWeek(weekId: string): Promise<void> {
 export interface EntryInput {
   qty: number;
   rate: number;
+  /** Guests. Counted in `qty`, but with no share row of its own. */
+  otherQty: number;
   note: string;
   shares: ShareInput[];
 }
@@ -177,6 +179,7 @@ export async function addEntry(
       day,
       qty: input.qty,
       rate: input.rate,
+      other_qty: input.otherQty,
       amount: sharesAmount(input.shares),
       note: input.note,
     })
@@ -241,6 +244,7 @@ export async function editEntry(
     .update({
       qty: input.qty,
       rate: input.rate,
+      other_qty: input.otherQty,
       amount: sharesAmount(input.shares),
       note: input.note,
     })

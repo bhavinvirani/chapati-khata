@@ -25,8 +25,9 @@ export interface Entry {
   id: string; // uuid
   week_start: string; // FK -> weeks.week_start
   day: string; // 'YYYY-MM-DD' — NOT unique; one row per add
-  qty: number; // the add's total — always equals the sum of its shares
+  qty: number; // the add's total — always equals sum(shares.qty) + other_qty
   rate: number; // price per chapati for this add
+  other_qty: number; // chapatis nobody on the list claimed; cost shared by those who ate
   amount: number; // always equals the sum of its shares' amounts
   note: string;
   created_at: string; // ISO timestamp — orders adds within a day

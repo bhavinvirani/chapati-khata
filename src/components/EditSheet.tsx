@@ -15,7 +15,7 @@ interface Props {
   onClose: () => void;
   onSave: (
     entry: Entry,
-    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+    input: { qty: number; rate: number; otherQty: number; note: string; shares: ShareInput[] },
   ) => void;
   onDelete: (entry: Entry) => void;
 }
@@ -31,6 +31,7 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
     for (const s of entry.entry_shares) out[s.user_id] = s.qty;
     return out;
   });
+  const [otherQty, setOtherQty] = useState(entry.other_qty ?? 0);
 
   // Anyone already in this add stays editable even if their split switch has
   // since been turned off — history is never rewritten by a status change.
@@ -60,7 +61,7 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
 
   const parsed = parseQty(qtyRaw);
   const total = parsed?.qty ?? 0;
-  const valid = total > 0 && remaining(total, eligible) === 0;
+  const valid = total > 0 && remaining(total, eligible, otherQty) === 0;
 
   return (
     <div className="ovl" onClick={onClose}>
@@ -90,6 +91,8 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
           total={total}
           rows={rows}
           onChange={setRows}
+          otherQty={otherQty}
+          onOtherChange={setOtherQty}
           lastAdd={null}
           disabled={busy}
         />
@@ -117,8 +120,9 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
                 onSave(entry, {
                   qty: parsed.qty,
                   rate: parsed.price,
+                  otherQty,
                   note,
-                  shares: buildShares(eligible, parsed.price),
+                  shares: buildShares(eligible, parsed.price, otherQty),
                 })
               }
             >

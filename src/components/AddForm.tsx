@@ -14,7 +14,7 @@ interface Props {
   users: User[];
   busy: boolean;
   onAdd: (
-    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+    input: { qty: number; rate: number; otherQty: number; note: string; shares: ShareInput[] },
     date: string,
   ) => Promise<boolean>;
 }
@@ -24,6 +24,7 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
   const [noteRaw, setNoteRaw] = useState("");
   const [addErr, setAddErr] = useState("");
   const [rows, setRows] = useState<Alloc>({});
+  const [otherQty, setOtherQty] = useState(0);
   const today = todayStr();
   const [selectedDate, setSelectedDate] = useState(today);
 
@@ -74,6 +75,8 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
     // so it fires at most once per `selectedDate` rather than on every render.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional
     setRows(dayAdds.length === 0 && lastAdd ? { ...lastAdd } : {});
+    // Guests are per-occasion — never carried over from another day's add.
+    setOtherQty(0);
   }, [selectedDate, users.length, dayAdds.length, lastAdd]);
 
   // What `rows` actually pays out, restricted to people currently offered.
@@ -92,7 +95,7 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
     return Object.fromEntries(Object.entries(rows).filter(([id]) => ids.has(id)));
   }, [rows, members]);
 
-  const left = remaining(total, eligible);
+  const left = remaining(total, eligible, otherQty);
   const canAdd = total > 0 && left === 0 && !busy;
   const dayQty = dayAdds.reduce((sum, e) => sum + e.qty, 0);
   const dayAmount = dayAdds.reduce((sum, e) => sum + e.amount, 0);
@@ -107,17 +110,25 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
       setAddErr("Enter a number like 5");
       return;
     }
-    const shares = buildShares(eligible, parsed.price);
+    const shares = buildShares(eligible, parsed.price, otherQty);
     if (shares.length === 0) {
-      setAddErr("Give at least one person some chapatis");
+      setAddErr(
+        otherQty > 0
+          ? "Somebody has to cover the guests — give at least one person some chapatis"
+          : "Give at least one person some chapatis",
+      );
       return;
     }
     const note = noteRaw.trim().slice(0, 60);
-    const ok = await onAdd({ qty: parsed.qty, rate: parsed.price, note, shares }, selectedDate);
+    const ok = await onAdd(
+      { qty: parsed.qty, rate: parsed.price, otherQty, note, shares },
+      selectedDate,
+    );
     if (ok) {
       setQtyRaw("");
       setNoteRaw("");
       setRows({});
+      setOtherQty(0);
     }
   }
 
@@ -168,6 +179,8 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
         total={total}
         rows={rows}
         onChange={setRows}
+        otherQty={otherQty}
+        onOtherChange={setOtherQty}
         lastAdd={lastAdd}
         disabled={busy}
       />

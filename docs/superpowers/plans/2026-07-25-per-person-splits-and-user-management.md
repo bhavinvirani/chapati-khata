@@ -755,7 +755,7 @@ export function groupByDay(entries: Entry[]): DayGroup[] {
       qty: adds.reduce((sum, a) => sum + a.qty, 0),
       amount: round2(adds.reduce((sum, a) => sum + a.amount, 0)),
     }))
-    .sort((a, b) => (a.day < b.day ? 1 : -1));
+    .sort((a, b) => b.day.localeCompare(a.day));
 }
 
 /**

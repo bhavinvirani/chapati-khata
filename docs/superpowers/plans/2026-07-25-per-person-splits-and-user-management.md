@@ -2455,7 +2455,11 @@ git commit -m "feat: show days, adds and per-person totals in the ledger"
 ```ts
 /** Add someone. Names are lowercased and trimmed, as the gate expects. */
 export async function addPerson(name: string, actor: string, deviceId: string): Promise<void> {
-  const clean = name.trim().toLowerCase();
+  const clean = normalizeName(name);
+  // The boundary re-checks rather than trusting its caller. A blank name is
+  // accepted by `users.name` (not null, but '' is allowed), invisible in the
+  // list, and can never log in — and there is no rename to fix it with.
+  if (!clean) throw new Error("A person needs a name.");
   const { error } = await supabase.from("users").insert({ name: clean });
   if (error) fail("addPerson", error);
   await logAction({ actor, action: "user_add", target: clean, device_id: deviceId });
@@ -2570,7 +2574,7 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
   }
 
   async function handleAdd() {
-    const clean = newName.trim().toLowerCase();
+    const clean = normalizeName(newName);
     if (!clean) return;
     if (people.some((p) => p.name === clean)) {
       onError(`${cap(clean)} is already on the list.`);
@@ -2582,9 +2586,31 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
     });
   }
 
-  /** Deletion is offered only once we know the person holds no history. */
+  /**
+   * Deletion is offered only once we know the person holds no history AND that
+   * removing them would not revoke a login the group cannot afford to lose.
+   *
+   * The second check is not optional: deleting a row removes the name the gate
+   * matches on, so it is a strict superset of clearing `can_login`. Without it
+   * the sole login-holder — who, if they are out of the split, holds zero
+   * shares forever — could delete themselves and lock the group out entirely.
+   */
   async function askDelete(u: User) {
-    const held = await db.hasShares(u.id);
+    if (u.can_login && !canRevokeLogin(u, actor, users)) {
+      onError(
+        u.name === actor
+          ? "You cannot delete yourself while you can log in."
+          : `${cap(u.name)} is the last person who can log in.`,
+      );
+      return;
+    }
+    let held: boolean;
+    try {
+      held = await db.hasShares(u.id);
+    } catch {
+      onError("Could not check that. Check your connection.");
+      return;
+    }
     if (!canDelete(held)) {
       onError(`${cap(u.name)} appears in past entries and cannot be deleted.`);
       return;

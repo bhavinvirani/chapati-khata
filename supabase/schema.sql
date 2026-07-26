@@ -60,7 +60,8 @@ create table if not exists public.logs (
   qty_after   integer,
   note_before text,
   note_after  text,
-  target      text,       -- the person a user_* action refers to
+  target      text,
+  detail      text,        -- what changed, in words (see src/lib/logtext.ts)       -- the person a user_* action refers to
   device_id   text
 );
 create index if not exists logs_ts_idx on public.logs(ts desc);

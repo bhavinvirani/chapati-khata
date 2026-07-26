@@ -3,6 +3,7 @@ import type { Entry } from "./types";
 import type { ShareInput } from "./lib/split";
 import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
+import { asAdd, describeAdd, describeEdit } from "./lib/logtext";
 import { cap, dayLabel, money, normalizeName, todayStr, weekIdOf } from "./lib/util";
 import { useAuth } from "./hooks/useAuth";
 import { useKhataData } from "./hooks/useKhataData";
@@ -96,7 +97,7 @@ export default function App() {
     const weekId = weekIdOf(date);
     const isToday = date === todayStr();
     return withBusy(async () => {
-      await db.addEntry(weekId, date, input, user, device);
+      await db.addEntry(weekId, date, input, user, device, describeAdd(input, users));
       flash(`${isToday ? "Today" : dayLabel(date)} logged`);
     });
   }
@@ -107,7 +108,13 @@ export default function App() {
   ) {
     if (!user) return;
     await withBusy(async () => {
-      await db.editEntry(entry, { ...input, note: input.note.trim() }, user, device);
+      await db.editEntry(
+        entry,
+        { ...input, note: input.note.trim() },
+        user,
+        device,
+        describeEdit(asAdd(entry), input, users),
+      );
       setEditing(null);
       flash("Entry updated");
     });
@@ -116,7 +123,7 @@ export default function App() {
   async function handleDeleteEntry(entry: Entry) {
     if (!user) return;
     await withBusy(async () => {
-      await db.deleteEntry(entry, user, device);
+      await db.deleteEntry(entry, user, device, describeAdd(asAdd(entry), users));
       setEditing(null);
       flash("Entry deleted");
     });

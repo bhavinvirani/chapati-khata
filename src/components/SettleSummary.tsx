@@ -1,6 +1,7 @@
+import { useState } from "react";
 import type { Entry, User } from "../types";
-import { nameOf, otherQty, perPerson } from "../lib/aggregate";
-import { cap, money, round2, weekLabel } from "../lib/util";
+import { groupByDay, nameOf, otherQty, perPerson } from "../lib/aggregate";
+import { cap, dayLabel, money, round2, weekLabel } from "../lib/util";
 
 interface Props {
   /** Every add being settled by this action. */
@@ -21,6 +22,7 @@ const CURRENT_YEAR = String(new Date().getFullYear());
  * number computed elsewhere could confirm the wrong one.
  */
 export function SettleSummary({ entries, users, weekIds }: Props) {
+  const [showDays, setShowDays] = useState(false);
   const people = perPerson(entries);
   const guests = otherQty(entries);
   const totalQty = entries.reduce((sum, e) => sum + e.qty, 0);
@@ -38,6 +40,26 @@ export function SettleSummary({ entries, users, weekIds }: Props) {
           {days} day{days !== 1 ? "s" : ""}
         </span>
       </div>
+
+      <button
+        className="settle-days-btn"
+        onClick={() => setShowDays(!showDays)}
+        aria-expanded={showDays}
+      >
+        {showDays ? "Hide the days" : "Show the days"}
+      </button>
+
+      {showDays && (
+        <ul className="settle-day-list">
+          {groupByDay(entries).map((d) => (
+            <li key={d.day} className="settle-day">
+              <span className="row-day">{dayLabel(d.day)}</span>
+              <span className="share-qty">{d.qty}</span>
+              <span className="share-amt">{money(d.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <ul className="share-rows">
         {people.map((p) => (

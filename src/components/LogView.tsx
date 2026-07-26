@@ -116,6 +116,7 @@ export function LogView({ logs, hasMore, loadingMore, onLoadMore }: Props) {
                 ev.note_after != null && (
                   <NoteChange before={ev.note_before} after={ev.note_after} />
                 )}
+              {ev.detail && <div className="log-detail">{ev.detail}</div>}
               <div className="log-when">{stamp(ev.ts)}</div>
             </div>
           </li>

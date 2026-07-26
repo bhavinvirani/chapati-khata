@@ -24,17 +24,17 @@ function logText(ev: LogRow): string {
     case "login":
       return "signed in";
     case "user_add":
-      return `added ${ev.target ?? "someone"}`;
+      return `added ${cap(ev.target ?? "someone")}`;
     case "user_delete":
-      return `deleted ${ev.target ?? "someone"}`;
+      return `deleted ${cap(ev.target ?? "someone")}`;
     case "user_split_on":
-      return `put ${ev.target ?? "someone"} in the split`;
+      return `put ${cap(ev.target ?? "someone")} in the split`;
     case "user_split_off":
-      return `took ${ev.target ?? "someone"} out of the split`;
+      return `took ${cap(ev.target ?? "someone")} out of the split`;
     case "user_login_on":
-      return `gave ${ev.target ?? "someone"} access`;
+      return `gave ${cap(ev.target ?? "someone")} access`;
     case "user_login_off":
-      return `revoked ${ev.target ?? "someone"}'s access`;
+      return `revoked ${cap(ev.target ?? "someone")}'s access`;
     default:
       return ev.action;
   }

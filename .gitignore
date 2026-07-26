@@ -149,3 +149,6 @@ supabase/.temp/
 
 # macOS
 .DS_Store
+# Stray Playwright screenshots taken during UI checks.
+m-gate.png
+*.playwright.png

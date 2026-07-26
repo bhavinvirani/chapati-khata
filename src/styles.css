@@ -235,6 +235,12 @@ html, body, #root{ min-height:100%; }
 .share-other .share-name{ font-style:italic; }
 .split-other{ margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); }
 .split-hint{ display:block; font-size:11px; color:var(--faint); margin-top:1px; }
+.split-sharers{ margin-top:9px; }
+.split-sharers-t{ font-size:11.5px; color:var(--faint); margin-bottom:6px; }
+.split-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.chip{ font-size:12.5px; padding:6px 11px; border-radius:99px; border:1.4px solid var(--line); background:var(--paper); color:var(--soft); min-height:32px; }
+.chip.on{ border-color:var(--marigold); background:#fff; color:var(--ink); font-weight:700; }
+.chip:disabled{ opacity:.5; }
 .day-tot{ flex:1; font-size:13px; color:var(--soft); }
 .add-line{ position:relative; margin:6px 0 0 78px; padding-right:40px; }
 .add-line-main{ display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; background:none; padding:6px 0; min-height:36px; }

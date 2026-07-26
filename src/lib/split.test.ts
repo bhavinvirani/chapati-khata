@@ -94,7 +94,7 @@ describe("buildShares with a guest bucket", () => {
     const ids = [A, B, C, "d", "e", "f", "g"];
     const rows: Record<string, number> = {};
     ids.forEach((id, i) => (rows[id] = i === 6 ? 10 : 5));
-    const shares = buildShares(rows, 0.5, 10);
+    const shares = buildShares(rows, 0.5, 10, ids);
 
     expect(shares).toHaveLength(7);
     expect(sharesAmount(shares)).toBe(25);
@@ -103,28 +103,73 @@ describe("buildShares with a guest bucket", () => {
   });
 
   it("gives the leftover cents to the earliest ids, so the sum is exact", () => {
-    const shares = buildShares({ [A]: 1, [B]: 1, [C]: 1 }, 0.5, 1);
+    const shares = buildShares({ [A]: 1, [B]: 1, [C]: 1 }, 0.5, 1, [A, B, C]);
     // 50 cents over 3 people: 16 each, 2 left over.
     expect(shares.map((s) => s.amount)).toEqual([0.67, 0.67, 0.66]);
     expect(sharesAmount(shares)).toBe(2);
   });
 
   it("is deterministic regardless of the order keys were entered", () => {
-    const forwards = buildShares({ [A]: 1, [B]: 1, [C]: 1 }, 0.5, 1);
-    const backwards = buildShares({ [C]: 1, [B]: 1, [A]: 1 }, 0.5, 1);
+    const forwards = buildShares({ [A]: 1, [B]: 1, [C]: 1 }, 0.5, 1, [A, B, C]);
+    const backwards = buildShares({ [C]: 1, [B]: 1, [A]: 1 }, 0.5, 1, [C, B, A]);
     expect(backwards).toEqual(forwards);
   });
 
   it("leaves the shares untouched when there are no guests", () => {
-    expect(buildShares({ [A]: 7, [B]: 5 }, 0.5, 0)).toEqual(buildShares({ [A]: 7, [B]: 5 }, 0.5));
+    expect(buildShares({ [A]: 7, [B]: 5 }, 0.5, 0, [A, B])).toEqual(
+      buildShares({ [A]: 7, [B]: 5 }, 0.5),
+    );
   });
 
   it("charges nobody when guests ate but no person did", () => {
-    expect(buildShares({}, 0.5, 10)).toEqual([]);
+    expect(buildShares({}, 0.5, 10, [])).toEqual([]);
   });
 
   it("gives a lone eater the whole guest cost", () => {
-    expect(buildShares({ [A]: 4 }, 0.5, 6)).toEqual([{ user_id: A, qty: 4, amount: 5 }]);
+    expect(buildShares({ [A]: 4 }, 0.5, 6, [A])).toEqual([{ user_id: A, qty: 4, amount: 5 }]);
+  });
+});
+
+describe("buildShares with a selective guest bucket", () => {
+  // The reported edge case: everything in Others, nobody takes a personal
+  // count. Previously this produced no rows at all and the add was refused.
+  it("charges the sharers when nobody took a personal count", () => {
+    const shares = buildShares({}, 1, 5, [A, B, C]);
+    expect(shares.map((s) => [s.qty, s.amount])).toEqual([
+      [0, 1.67],
+      [0, 1.67],
+      [0, 1.66],
+    ]);
+    expect(sharesAmount(shares)).toBe(5);
+  });
+
+  it("charges only the chosen few, not everyone offered", () => {
+    const shares = buildShares({ [A]: 2 }, 1, 5, [B, C]);
+    expect(shares).toEqual([
+      { user_id: A, qty: 2, amount: 2 },
+      { user_id: B, qty: 0, amount: 2.5 },
+      { user_id: C, qty: 0, amount: 2.5 },
+    ]);
+    expect(sharesAmount(shares)).toBe(7);
+  });
+
+  it("gives an eater who is also a sharer both parts", () => {
+    const shares = buildShares({ [A]: 2 }, 1, 5, [A, B]);
+    expect(shares).toEqual([
+      { user_id: A, qty: 2, amount: 4.5 },
+      { user_id: B, qty: 0, amount: 2.5 },
+    ]);
+    expect(sharesAmount(shares)).toBe(7);
+  });
+
+  it("writes no row for somebody who neither ate nor shared", () => {
+    expect(buildShares({ [A]: 3 }, 1, 2, [B]).map((s) => s.user_id)).toEqual([A, B]);
+  });
+
+  it("drops the guest cost entirely when nobody is chosen to cover it", () => {
+    // The composer refuses to save in this state; the maths still must not
+    // invent a charge for someone who was not picked.
+    expect(buildShares({ [A]: 3 }, 1, 2, [])).toEqual([{ user_id: A, qty: 3, amount: 3 }]);
   });
 });
 

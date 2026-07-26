@@ -25,6 +25,9 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
   const [addErr, setAddErr] = useState("");
   const [rows, setRows] = useState<Alloc>({});
   const [otherQty, setOtherQty] = useState(0);
+  // null means "everyone" — so late-loading members, or a person added while
+  // the form is open, are covered without the user re-picking.
+  const [sharerPick, setSharerPick] = useState<string[] | null>(null);
   const today = todayStr();
   const [selectedDate, setSelectedDate] = useState(today);
 
@@ -77,6 +80,7 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
     setRows(dayAdds.length === 0 && lastAdd ? { ...lastAdd } : {});
     // Guests are per-occasion — never carried over from another day's add.
     setOtherQty(0);
+    setSharerPick(null);
   }, [selectedDate, users.length, dayAdds.length, lastAdd]);
 
   // What `rows` actually pays out, restricted to people currently offered.
@@ -95,6 +99,13 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
     return Object.fromEntries(Object.entries(rows).filter(([id]) => ids.has(id)));
   }, [rows, members]);
 
+  // Restricted to people currently offered, for the same reason `eligible` is:
+  // somebody removed from the split mid-compose must not keep a charge.
+  const sharers = useMemo(() => {
+    const ids = members.map((m) => m.id);
+    return sharerPick === null ? ids : sharerPick.filter((id) => ids.includes(id));
+  }, [sharerPick, members]);
+
   const left = remaining(total, eligible, otherQty);
   const canAdd = total > 0 && left === 0 && !busy;
   const dayQty = dayAdds.reduce((sum, e) => sum + e.qty, 0);
@@ -110,13 +121,13 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
       setAddErr("Enter a number like 5");
       return;
     }
-    const shares = buildShares(eligible, parsed.price, otherQty);
+    if (otherQty > 0 && sharers.length === 0) {
+      setAddErr("Pick who covers the guests");
+      return;
+    }
+    const shares = buildShares(eligible, parsed.price, otherQty, sharers);
     if (shares.length === 0) {
-      setAddErr(
-        otherQty > 0
-          ? "Somebody has to cover the guests — give at least one person some chapatis"
-          : "Give at least one person some chapatis",
-      );
+      setAddErr("Give at least one person some chapatis");
       return;
     }
     const note = noteRaw.trim().slice(0, 60);
@@ -129,6 +140,7 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
       setNoteRaw("");
       setRows({});
       setOtherQty(0);
+      setSharerPick(null);
     }
   }
 
@@ -181,6 +193,8 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
         onChange={setRows}
         otherQty={otherQty}
         onOtherChange={setOtherQty}
+        otherSharers={sharers}
+        onSharersChange={setSharerPick}
         lastAdd={lastAdd}
         disabled={busy}
       />

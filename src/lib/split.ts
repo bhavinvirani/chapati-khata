@@ -46,36 +46,50 @@ export function evenSplit(total: number, userIds: string[]): Alloc {
 }
 
 /**
- * Turn an allocation into rows to persist. People who took nothing get no row
- * at all — "who was in this add" is exactly the set of rows present.
+ * Turn an allocation into rows to persist.
  *
- * `otherQty` is the guest bucket. Guests cost real money that nobody claimed,
- * so the people who did eat absorb it — and only them, not everyone in the
- * split, because you should not pay for a guest on a day you were not there.
+ * `otherQty` is the guest bucket, and `sharerIds` is who covers it — everyone
+ * in the split by default, or a chosen few. A sharer who took nothing still
+ * gets a row: they owe money, and money without a row cannot be shown or
+ * settled. That is why `entry_shares.qty` permits 0.
  *
  * The guest cost is divided in whole cents by largest remainder rather than by
- * dividing the count, because a count rarely divides: 10 guest chapatis across
- * 7 people is not an integer, but 500 cents is. Distributing in cents and
- * handing the leftover ones to the earliest ids means the shares still sum to
- * exactly what the guests cost — no cent invented, none lost. Sorting by id
- * first makes which people absorb the leftover deterministic, so the same
- * allocation always produces the same rows.
+ * dividing the count, because a count rarely divides: 5 guest chapatis across
+ * 7 people is not an integer, but 500 cents is. Handing the leftover cents to
+ * the earliest ids means the shares sum to exactly what the guests cost — no
+ * cent invented, none lost. Sorting first makes which people absorb the
+ * leftover deterministic, so the same allocation always produces the same rows.
+ *
+ * A row with neither a count nor money is never written — that is somebody who
+ * was simply not part of this add.
  */
-export function buildShares(rows: Alloc, rate: number, otherQty = 0): ShareInput[] {
-  const eaters = Object.entries(rows)
-    .filter(([, qty]) => qty > 0)
-    .sort(([a], [b]) => a.localeCompare(b));
-  if (eaters.length === 0) return [];
+export function buildShares(
+  rows: Alloc,
+  rate: number,
+  otherQty = 0,
+  sharerIds: string[] = [],
+): ShareInput[] {
+  const byId = (a: string, b: string) => a.localeCompare(b);
+  const sharers = otherQty > 0 ? [...new Set(sharerIds)].sort(byId) : [];
 
   const poolCents = Math.round(round2(otherQty * rate) * 100);
-  const each = Math.floor(poolCents / eaters.length);
-  const leftover = poolCents - each * eaters.length;
+  const each = sharers.length > 0 ? Math.floor(poolCents / sharers.length) : 0;
+  const leftover = sharers.length > 0 ? poolCents - each * sharers.length : 0;
+  const slice = new Map<string, number>();
+  sharers.forEach((id, i) => slice.set(id, each + (i < leftover ? 1 : 0)));
 
-  return eaters.map(([user_id, qty], i) => ({
-    user_id,
-    qty,
-    amount: round2(round2(qty * rate) + (each + (i < leftover ? 1 : 0)) / 100),
-  }));
+  const ate = Object.keys(rows).filter((id) => rows[id] > 0);
+  return [...new Set([...ate, ...sharers])]
+    .sort(byId)
+    .map((user_id) => {
+      const qty = rows[user_id] > 0 ? rows[user_id] : 0;
+      return {
+        user_id,
+        qty,
+        amount: round2(round2(qty * rate) + (slice.get(user_id) ?? 0) / 100),
+      };
+    })
+    .filter((s) => s.qty > 0 || s.amount > 0);
 }
 
 /**

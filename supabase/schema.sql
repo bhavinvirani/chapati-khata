@@ -42,7 +42,7 @@ create table if not exists public.users (
 create table if not exists public.entry_shares (
   entry_id uuid    not null references public.entries(id) on delete cascade,
   user_id  uuid    not null references public.users(id)   on delete restrict,
-  qty      integer not null check (qty > 0),
+  qty      integer not null check (qty >= 0), -- 0 when they only cover guests
   amount   numeric(10,2) not null,
   primary key (entry_id, user_id)
 );

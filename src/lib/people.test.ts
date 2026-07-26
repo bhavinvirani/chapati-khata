@@ -68,6 +68,14 @@ describe("sortPeople", () => {
     sortPeople(users);
     expect(users[0].name).toBe("parth");
   });
+
+  // The seed inserts everyone in one statement, so every seeded person shares
+  // a created_at. This is the normal case for the first seven people, not an
+  // edge case, and without a tiebreak their order would be unspecified.
+  it("falls back to name when timestamps tie, as the seeded people do", () => {
+    const users = [user("samir"), user("abhishek"), user("deven")];
+    expect(sortPeople(users).map((u) => u.name)).toEqual(["abhishek", "deven", "samir"]);
+  });
 });
 
 describe("splitMembers", () => {

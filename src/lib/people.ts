@@ -13,8 +13,7 @@ import type { User } from "../types";
 export function canRevokeLogin(target: User, actorName: string, users: User[]): boolean {
   if (target.name === actorName) return false;
   const withLogin = users.filter((u) => u.can_login);
-  if (withLogin.length <= 1) return false;
-  return true;
+  return withLogin.length > 1;
 }
 
 /**
@@ -27,9 +26,20 @@ export function canDelete(hasShares: boolean): boolean {
   return !hasShares;
 }
 
-/** People in stable display order: oldest first, so additions append. */
+/**
+ * People in stable display order: oldest first, so additions append.
+ *
+ * Name breaks ties, and ties are the normal case rather than an edge one: the
+ * seed inserts everyone in a single statement and Postgres `now()` is
+ * transaction-stable, so every seeded person shares one `created_at`. A
+ * comparator that never returns 0 would leave their row order resting on
+ * unspecified sort behaviour, and rows that reshuffle between loads are how
+ * you type a count into the wrong person's box.
+ */
 export function sortPeople(users: User[]): User[] {
-  return [...users].sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+  return [...users].sort(
+    (a, b) => a.created_at.localeCompare(b.created_at) || a.name.localeCompare(b.name),
+  );
 }
 
 /**

@@ -76,7 +76,23 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
     setRows(dayAdds.length === 0 && lastAdd ? { ...lastAdd } : {});
   }, [selectedDate, users.length, dayAdds.length, lastAdd]);
 
-  const left = remaining(total, rows);
+  // What `rows` actually pays out, restricted to people currently offered.
+  //
+  // `rows` itself is never re-filtered as `members` changes, so if another
+  // device clears someone's `in_split` while this form is open, realtime
+  // updates `members` and their box disappears — but their key lingers in
+  // `rows`. Gating and writing off `rows` directly would let `remaining` read
+  // "All allocated" while the visible boxes sum to less than the total, and
+  // then write a share for someone the form no longer offers: the same
+  // billed-invisibly outcome §4.8 forbids, reached by concurrency instead of
+  // prefill. `<SplitEditor>` still gets raw `rows` — it owns and echoes
+  // exactly what was typed; only the gate and the write use this.
+  const eligible = useMemo(() => {
+    const ids = new Set(members.map((m) => m.id));
+    return Object.fromEntries(Object.entries(rows).filter(([id]) => ids.has(id)));
+  }, [rows, members]);
+
+  const left = remaining(total, eligible);
   const canAdd = total > 0 && left === 0 && !busy;
   const dayQty = dayAdds.reduce((sum, e) => sum + e.qty, 0);
   const dayAmount = dayAdds.reduce((sum, e) => sum + e.amount, 0);
@@ -91,7 +107,7 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
       setAddErr("Enter a number like 5");
       return;
     }
-    const shares = buildShares(rows, parsed.price);
+    const shares = buildShares(eligible, parsed.price);
     if (shares.length === 0) {
       setAddErr("Give at least one person some chapatis");
       return;

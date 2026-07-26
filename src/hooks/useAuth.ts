@@ -18,13 +18,24 @@ export function useAuth() {
   const restoreUser = useCallback(async () => {
     const saved = localStorage.getItem("khata.name");
     if (!saved) return;
+    let allowed: boolean;
     try {
-      if (!(await db.nameCanLogin(saved))) {
-        localStorage.removeItem("khata.name");
-        return;
-      }
+      allowed = await db.nameCanLogin(saved);
     } catch {
       // Offline or server error — keep the session rather than lock them out.
+      setUser(saved);
+      return;
+    }
+    if (!allowed) {
+      // The cleanup is best-effort and kept in its own try/catch: a throw here
+      // is a localStorage quirk, not a network problem, and must not fall into
+      // the catch above and restore a session that was just refused.
+      try {
+        localStorage.removeItem("khata.name");
+      } catch {
+        /* ignore */
+      }
+      return;
     }
     setUser(saved);
   }, []);

@@ -43,9 +43,24 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
     return [...inSplit, ...users.filter((u) => !seen.has(u.id) && held.has(u.id))];
   }, [users, entry.entry_shares]);
 
+  // What `rows` actually pays out, restricted to people currently offered.
+  //
+  // `members` already keeps a deactivated person's row alive when they hold a
+  // stored share on this add (see above), so this filter does not drop them —
+  // it only catches someone whose `in_split` is cleared by another device
+  // while this sheet is open. Without it, `remaining` would count a key whose
+  // box has vanished and let the save button write a share for someone the
+  // sheet no longer offers, the same billed-invisibly outcome §4.8 forbids.
+  // `<SplitEditor>` still gets raw `rows` — it owns and echoes exactly what
+  // was typed; only the gate and the write use this.
+  const eligible = useMemo(() => {
+    const ids = new Set(members.map((m) => m.id));
+    return Object.fromEntries(Object.entries(rows).filter(([id]) => ids.has(id)));
+  }, [rows, members]);
+
   const parsed = parseQty(qtyRaw);
   const total = parsed?.qty ?? 0;
-  const valid = total > 0 && remaining(total, rows) === 0;
+  const valid = total > 0 && remaining(total, eligible) === 0;
 
   return (
     <div className="ovl" onClick={onClose}>
@@ -103,7 +118,7 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
                   qty: parsed.qty,
                   rate: parsed.price,
                   note,
-                  shares: buildShares(rows, parsed.price),
+                  shares: buildShares(eligible, parsed.price),
                 })
               }
             >

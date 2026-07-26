@@ -143,8 +143,19 @@ export default function App() {
     setTab("ledger");
   }
 
-  function exportJSON() {
-    const payload = { exported_at: new Date().toISOString(), weeks, users, entries, logs };
+  // Uses `allEntries`, not `entries`: the latter holds unpaid weeks only, and a
+  // backup that silently dropped every paid week — plus its per-person shares
+  // — would not be a backup. History is lazily loaded, so make sure it is
+  // actually populated first, the same way the Stats button does.
+  async function exportJSON() {
+    if (!historyLoaded) await loadHistory();
+    const payload = {
+      exported_at: new Date().toISOString(),
+      weeks,
+      users,
+      entries: allEntries,
+      logs,
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

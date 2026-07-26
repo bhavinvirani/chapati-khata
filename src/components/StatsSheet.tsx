@@ -200,7 +200,7 @@ export function StatsSheet({ entries, users, onClose }: Props) {
                     <li className="share-row share-other">
                       <span className="share-name">Others</span>
                       <span className="share-qty">{monthOther}</span>
-                      <span className="share-amt">&mdash;</span>
+                      <span className="share-amt" />
                       <span className="share-rate" />
                     </li>
                   )}
@@ -225,7 +225,7 @@ export function StatsSheet({ entries, users, onClose }: Props) {
                     <li className="share-row share-other">
                       <span className="share-name">Others</span>
                       <span className="share-qty">{lifetimeOther}</span>
-                      <span className="share-amt">&mdash;</span>
+                      <span className="share-amt" />
                     </li>
                   )}
                 </ul>

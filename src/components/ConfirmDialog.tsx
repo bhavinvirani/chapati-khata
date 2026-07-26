@@ -18,6 +18,7 @@ export function ConfirmDialog({ confirm, busy, onClose }: Props) {
           </button>
         </div>
         <p className="dlg-b">{confirm.body}</p>
+        {confirm.detail}
         <div className="dlg-a">
           <button className="btn btn-ghost" onClick={onClose}>
             Cancel

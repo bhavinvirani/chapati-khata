@@ -81,7 +81,7 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
                   <li className="share-row share-other">
                     <span className="share-name">Others</span>
                     <span className="share-qty">{otherQty(d.adds)}</span>
-                    <span className="share-amt">&mdash;</span>
+                    <span className="share-amt" />
                   </li>
                 )}
               </ul>
@@ -175,7 +175,7 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
               <li className="share-row share-other">
                 <span className="share-name">Others</span>
                 <span className="share-qty">{weekOther}</span>
-                <span className="share-amt">&mdash;</span>
+                <span className="share-amt" />
               </li>
             )}
           </ul>

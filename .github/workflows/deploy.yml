@@ -44,17 +44,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check Supabase secrets are configured
-        # Lets this land and merge before the one-time secret setup is done,
-        # without ever blocking the (previously working) frontend deploy that
-        # `build` depends on below. Once the two secrets are added, this
-        # flips to true and every step after it starts actually running.
+        # Used to skip straight to `build` when the secrets were missing, so
+        # this could land before the one-time setup was done without blocking
+        # the frontend deploy. That stopped being safe on this branch: the
+        # frontend now hard-requires `users`, `entry_shares` and
+        # `entries.rate`, so shipping it against an un-migrated database is a
+        # broken deploy, not a harmless skip. Fail instead. Once the two
+        # secrets are added, this passes and every step after it runs.
         id: check
         run: |
           if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::SUPABASE_ACCESS_TOKEN/SUPABASE_DB_PASSWORD not set on the production environment yet — skipping migrations and function deploy. See the setup steps at the top of this file."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::error::SUPABASE_ACCESS_TOKEN/SUPABASE_DB_PASSWORD not set on the production environment yet — refusing to build/deploy a frontend that requires the migrated schema. See the setup steps at the top of this file."
+            exit 1
           fi
       - name: Guard against unmarked destructive migrations
         # Same check as ci.yml, repeated here because main has no branch

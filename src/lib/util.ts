@@ -37,15 +37,33 @@ export function weekIdOf(dateStr: string): string {
 }
 export const isCurrentWeek = (weekId: string) => weekId === weekIdOf(todayStr());
 
+/** "Jul 13 – 19" or "Jun 30 – Jul 6" (year only when asked). Shared by
+ * weekLabel (a fixed 7-day span) and the Splitwise settlement label (an
+ * arbitrary span across one or more weeks). */
+export function dateRangeLabel(start: Date, end: Date, withYear = false): string {
+  const startYear = start.getFullYear();
+  const endYear = end.getFullYear();
+  const yearsDiffer = startYear !== endYear;
+
+  if (yearsDiffer && withYear) {
+    // Cross-year case: both dates need their years
+    if (start.getMonth() === end.getMonth())
+      return `${MON[start.getMonth()]} ${start.getDate()}, ${startYear} – ${end.getDate()}, ${endYear}`;
+    return `${MON[start.getMonth()]} ${start.getDate()}, ${startYear} – ${MON[end.getMonth()]} ${end.getDate()}, ${endYear}`;
+  }
+
+  const y = withYear ? `, ${startYear}` : "";
+  if (start.getMonth() === end.getMonth())
+    return `${MON[start.getMonth()]} ${start.getDate()} – ${end.getDate()}${y}`;
+  return `${MON[start.getMonth()]} ${start.getDate()} – ${MON[end.getMonth()]} ${end.getDate()}${y}`;
+}
+
 /** "Jul 13 – 19" or "Jun 30 – Jul 6" (year only when asked). */
 export function weekLabel(weekId: string, withYear = false): string {
   const mon = parseYMD(weekId);
   const sun = new Date(mon);
   sun.setDate(sun.getDate() + 6);
-  const y = withYear ? `, ${mon.getFullYear()}` : "";
-  if (mon.getMonth() === sun.getMonth())
-    return `${MON[mon.getMonth()]} ${mon.getDate()} – ${sun.getDate()}${y}`;
-  return `${MON[mon.getMonth()]} ${mon.getDate()} – ${MON[sun.getMonth()]} ${sun.getDate()}${y}`;
+  return dateRangeLabel(mon, sun, withYear);
 }
 
 /** "Wed Jul 15" */

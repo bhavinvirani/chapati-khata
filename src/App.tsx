@@ -252,8 +252,10 @@ export default function App() {
                       {prevYear && year !== prevYear && <div className="year-sep">{year}</div>}
                       <WeekCard
                         w={w}
+                        users={users}
                         busy={busy}
                         onEntry={(entry) => setEditing(entry)}
+                        onDiscard={handleDeleteEntry}
                         onPay={() =>
                           setConfirm({
                             title: "Mark this week paid?",
@@ -274,6 +276,7 @@ export default function App() {
                   historyLoaded={historyLoaded}
                   loadingHistory={loadingHistory}
                   paid={paid}
+                  users={users}
                   busy={busy}
                   onExpand={loadHistory}
                   onEntry={(entry) => setEditing(entry)}

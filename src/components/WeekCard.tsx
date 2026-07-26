@@ -1,19 +1,25 @@
-import type { Entry, WeekView } from "../types";
-import { dayLabel, isCurrentWeek, money, stamp, weekLabel } from "../lib/util";
+import { useState } from "react";
+import type { Entry, User, WeekView } from "../types";
+import { groupByDay, nameOf, needsRepair, perPerson } from "../lib/aggregate";
+import { cap, dayLabel, isCurrentWeek, money, stamp, weekLabel } from "../lib/util";
 import { IcCheck, IcLock, IcPencil } from "./icons";
 
 interface Props {
   w: WeekView;
+  users: User[];
   busy: boolean;
   onEntry: (entry: Entry) => void;
+  onDiscard: (entry: Entry) => void;
   onPay: () => void;
   onReopen: () => void;
 }
 
 const CURRENT_YEAR = String(new Date().getFullYear());
 
-export function WeekCard({ w, busy, onEntry, onPay, onReopen }: Props) {
-  const rows = [...w.entries].sort((a, b) => (a.day < b.day ? 1 : -1));
+export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }: Props) {
+  const [openAdd, setOpenAdd] = useState<string | null>(null);
+  const days = groupByDay(w.entries);
+  const people = perPerson(w.entries);
   const showYear = w.week_start.slice(0, 4) !== CURRENT_YEAR;
 
   return (
@@ -46,31 +52,93 @@ export function WeekCard({ w, busy, onEntry, onPay, onReopen }: Props) {
       </div>
 
       <ul className="rows">
-        {rows.map((e) => (
-          <li
-            key={e.id}
-            className={"row" + (w.paid ? " locked" : "")}
-            onClick={() => !w.paid && onEntry(e)}
-            role={w.paid ? undefined : "button"}
-            tabIndex={w.paid ? undefined : 0}
-            onKeyDown={(ev) => {
-              if (!w.paid && (ev.key === "Enter" || ev.key === " ")) {
-                ev.preventDefault();
-                onEntry(e);
-              }
-            }}
-          >
-            <div className="row-day">{dayLabel(e.day)}</div>
-            <div className="row-mid">
-              <span className="row-qty">{e.qty}</span>
-              <span className="row-unit">chapati{e.qty !== 1 ? "s" : ""}</span>
-              {e.note && <span className="row-note">{e.note}</span>}
+        {days.map((d) => (
+          <li key={d.day} className="day">
+            <div className="day-head">
+              <span className="row-day">{dayLabel(d.day)}</span>
+              <span className="day-tot">
+                {d.qty} chapati{d.qty !== 1 ? "s" : ""}
+              </span>
+              <span className="row-amt">{money(d.amount)}</span>
             </div>
-            <div className="row-amt">{money(e.amount)}</div>
-            {!w.paid && <IcPencil className="row-edit" />}
+
+            {d.adds.map((e) => {
+              const broken = needsRepair(e);
+              const open = openAdd === e.id;
+              return (
+                <div key={e.id} className={"add-line" + (broken ? " broken" : "")}>
+                  <button
+                    className="add-line-main"
+                    onClick={() => setOpenAdd(open ? null : e.id)}
+                    aria-expanded={open}
+                  >
+                    <span className="add-line-qty">
+                      {e.qty} @ {money(e.rate)}
+                    </span>
+                    {e.note && <span className="row-note">{e.note}</span>}
+                    <span className="row-amt">{money(e.amount)}</span>
+                  </button>
+
+                  {!w.paid && (
+                    <button
+                      className="icon-btn add-line-edit"
+                      onClick={() => onEntry(e)}
+                      aria-label="Edit this add"
+                    >
+                      <IcPencil className="ic sm" />
+                    </button>
+                  )}
+
+                  {broken && (
+                    <div className="repair">
+                      <span>This add was not fully split.</span>
+                      <div className="repair-a">
+                        <button className="link" disabled={busy} onClick={() => onEntry(e)}>
+                          Finish split
+                        </button>
+                        <button
+                          className="link danger"
+                          disabled={busy}
+                          onClick={() => onDiscard(e)}
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {open && !broken && (
+                    <ul className="share-rows">
+                      {e.entry_shares.map((s) => (
+                        <li key={s.user_id} className="share-row">
+                          <span className="share-name">{cap(nameOf(users, s.user_id))}</span>
+                          <span className="share-qty">{s.qty}</span>
+                          <span className="share-amt">{money(s.amount)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
           </li>
         ))}
       </ul>
+
+      {people.length > 0 && (
+        <div className="week-people">
+          <div className="week-people-t">Per person this week</div>
+          <ul className="share-rows">
+            {people.map((p) => (
+              <li key={p.userId} className="share-row">
+                <span className="share-name">{cap(nameOf(users, p.userId))}</span>
+                <span className="share-qty">{p.qty}</span>
+                <span className="share-amt">{money(p.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {w.paid && (
         <div className="week-foot">

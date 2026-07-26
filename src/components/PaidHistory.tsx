@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import type { Entry, WeekView } from "../types";
+import type { Entry, User, WeekView } from "../types";
 import { WeekCard } from "./WeekCard";
 
 interface Props {
@@ -7,6 +7,7 @@ interface Props {
   historyLoaded: boolean;
   loadingHistory: boolean;
   paid: WeekView[];
+  users: User[];
   busy: boolean;
   onExpand: () => void;
   onEntry: (entry: Entry) => void;
@@ -18,6 +19,7 @@ export function PaidHistory({
   historyLoaded,
   loadingHistory,
   paid,
+  users,
   busy,
   onExpand,
   onEntry,
@@ -56,8 +58,10 @@ export function PaidHistory({
                   {prevYear && year !== prevYear && <div className="year-sep">{year}</div>}
                   <WeekCard
                     w={w}
+                    users={users}
                     busy={busy}
                     onEntry={onEntry}
+                    onDiscard={() => {}}
                     onPay={() => {}}
                     onReopen={() => onReopen(w.week_start)}
                   />

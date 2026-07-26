@@ -232,3 +232,23 @@ html, body, #root{ min-height:100%; }
 .split-left.ok{ color:var(--herb); }
 .split-left.over{ color:var(--brick); }
 .split-empty{ font-size:13px; color:var(--soft); padding:8px 2px; }
+
+/* ── day / add / share rows ── */
+.day{ border-top:1px dashed var(--line); padding:8px 8px 10px; }
+.day-head{ display:flex; align-items:baseline; gap:10px; }
+.day-tot{ flex:1; font-size:13px; color:var(--soft); }
+.add-line{ position:relative; margin:6px 0 0 78px; padding-right:40px; }
+.add-line-main{ display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; background:none; padding:6px 0; min-height:36px; }
+.add-line-qty{ font-family:var(--mono); font-size:14px; color:var(--ink); flex:1; }
+.add-line-edit{ position:absolute; top:2px; right:0; }
+.add-line.broken{ background:var(--brick-tint); border-radius:8px; padding:4px 8px; }
+.repair{ font-size:12.5px; color:var(--brick); padding:4px 0 6px; }
+.repair-a{ display:flex; gap:14px; margin-top:4px; }
+.link.danger{ color:var(--brick); }
+.share-rows{ list-style:none; padding:4px 0 2px; display:flex; flex-direction:column; gap:4px; }
+.share-row{ display:flex; align-items:baseline; gap:10px; font-size:13px; }
+.share-name{ flex:1; color:var(--soft); }
+.share-qty{ font-family:var(--mono); color:var(--ink); width:32px; text-align:right; }
+.share-amt{ font-family:var(--mono); color:var(--ink); width:60px; text-align:right; }
+.week-people{ border-top:1px dashed var(--line); padding:10px 16px; }
+.week-people-t{ font-size:11.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); margin-bottom:6px; }

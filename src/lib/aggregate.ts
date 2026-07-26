@@ -64,7 +64,12 @@ export function groupByDay(entries: Entry[]): DayGroup[] {
 export function needsRepair(entry: Entry): boolean {
   const shares = entry.entry_shares ?? [];
   if (shares.length === 0) return true;
-  return shares.reduce((sum, s) => sum + s.qty, 0) !== entry.qty;
+  if (shares.reduce((sum, s) => sum + s.qty, 0) !== entry.qty) return true;
+  // Money needs a tolerance rather than `!==`: both sides are float sums of
+  // numeric(10,2) values, so 0.1 + 0.2 must still count as agreeing with 0.30.
+  // Anything genuinely wrong is out by at least a cent.
+  const amount = round2(shares.reduce((sum, s) => sum + s.amount, 0));
+  return Math.abs(amount - entry.amount) > 0.005;
 }
 
 /** A person's name for display, never a raw uuid. */

@@ -86,6 +86,17 @@ describe("needsRepair", () => {
   it("flags an add whose shares do not sum to its total", () => {
     expect(needsRepair(entry({ qty: 20 }))).toBe(true);
   });
+
+  // A rate-only edit rewrites every share's amount but no share's qty. If the
+  // entry-row update then fails, the qty check alone would see nothing wrong.
+  it("flags an add whose share amounts do not sum to its amount", () => {
+    expect(needsRepair(entry({ amount: 9 }))).toBe(true);
+  });
+
+  it("tolerates float noise in summed money", () => {
+    const shares = [share(A, 1, 0.1), share(B, 1, 0.2)];
+    expect(needsRepair(entry({ qty: 2, amount: 0.3, entry_shares: shares }))).toBe(false);
+  });
 });
 
 describe("nameOf", () => {

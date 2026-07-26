@@ -339,7 +339,9 @@ export default function App() {
 
       {confirm && <ConfirmDialog confirm={confirm} busy={busy} onClose={clearConfirm} />}
 
-      {showStats && <StatsSheet entries={allEntries} onClose={() => setShowStats(false)} />}
+      {showStats && (
+        <StatsSheet entries={allEntries} users={users} onClose={() => setShowStats(false)} />
+      )}
 
       {showPeople && user && (
         <PeopleSheet

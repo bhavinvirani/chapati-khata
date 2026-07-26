@@ -263,3 +263,7 @@ html, body, #root{ min-height:100%; }
 .ppl-you{ margin-left:6px; font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); }
 .ppl-why{ display:block; font-size:11.5px; color:var(--faint); margin-top:2px; }
 .ppl-note{ margin-top:14px; font-size:12.5px; color:var(--soft); line-height:1.5; }
+
+.stats-people{ margin-top:18px; }
+.stats-life{ margin-top:16px; }
+.share-rate{ font-family:var(--mono); color:var(--faint); font-size:12px; width:62px; text-align:right; }

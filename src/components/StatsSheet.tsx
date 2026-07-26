@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import type { Entry } from "../types";
-import { money, round2 } from "../lib/util";
+import type { Entry, User } from "../types";
+import { nameOf, perPerson } from "../lib/aggregate";
+import { cap, money, round2 } from "../lib/util";
 import { IcX } from "./icons";
 
 const MONTHS = [
@@ -20,10 +21,11 @@ const MONTHS = [
 
 interface Props {
   entries: Entry[];
+  users: User[];
   onClose: () => void;
 }
 
-export function StatsSheet({ entries, onClose }: Props) {
+export function StatsSheet({ entries, users, onClose }: Props) {
   const months = useMemo(() => {
     const set = new Set<string>();
     for (const e of entries) set.add(e.day.slice(0, 7));
@@ -67,6 +69,13 @@ export function StatsSheet({ entries, onClose }: Props) {
       pqty,
     };
   }, [entries, key, idx, months]);
+
+  const monthPeople = useMemo(
+    () => (key ? perPerson(entries.filter((e) => e.day.slice(0, 7) === key)) : []),
+    [entries, key],
+  );
+
+  const lifetime = useMemo(() => perPerson(entries), [entries]);
 
   if (!stats) {
     return (
@@ -158,6 +167,35 @@ export function StatsSheet({ entries, onClose }: Props) {
             )}
           </div>
         </div>
+
+        {monthPeople.length > 0 && (
+          <div className="stats-people">
+            <div className="week-people-t">This month, per person</div>
+            <ul className="share-rows">
+              {monthPeople.map((p) => (
+                <li key={p.userId} className="share-row">
+                  <span className="share-name">{cap(nameOf(users, p.userId))}</span>
+                  <span className="share-qty">{p.qty}</span>
+                  <span className="share-amt">{money(p.amount)}</span>
+                  <span className="share-rate">
+                    {money(p.qty > 0 ? round2(p.amount / p.qty) : 0)}/ea
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="week-people-t stats-life">Lifetime</div>
+            <ul className="share-rows">
+              {lifetime.map((p) => (
+                <li key={p.userId} className="share-row">
+                  <span className="share-name">{cap(nameOf(users, p.userId))}</span>
+                  <span className="share-qty">{p.qty}</span>
+                  <span className="share-amt">{money(p.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

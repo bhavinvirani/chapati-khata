@@ -100,14 +100,14 @@ drop policy if exists "authed all - entries"      on public.entries;
 drop policy if exists "authed all - logs"         on public.logs;
 drop policy if exists "authed all - users"        on public.users;
 drop policy if exists "authed all - entry_shares" on public.entry_shares;
-drop policy if exists "authed all - settlements" on public.settlements;
+drop policy if exists "authed all - settlements"  on public.settlements;
 
 create policy "authed all - weeks"        on public.weeks        for all to authenticated using (true) with check (true);
 create policy "authed all - entries"      on public.entries      for all to authenticated using (true) with check (true);
 create policy "authed all - logs"         on public.logs         for all to authenticated using (true) with check (true);
 create policy "authed all - users"        on public.users        for all to authenticated using (true) with check (true);
 create policy "authed all - entry_shares" on public.entry_shares for all to authenticated using (true) with check (true);
-create policy "authed all - settlements" on public.settlements for all to authenticated using (true) with check (true);
+create policy "authed all - settlements"  on public.settlements for all to authenticated using (true) with check (true);
 
 -- RLS policies only take effect once the role also holds the table-level
 -- grant; without this, queries fail with "permission denied for table ...".

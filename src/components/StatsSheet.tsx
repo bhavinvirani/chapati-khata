@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Entry, User } from "../types";
-import { nameOf, perPerson } from "../lib/aggregate";
+import { nameOf, otherQty, perPerson } from "../lib/aggregate";
 import { cap, money, round2 } from "../lib/util";
 import { IcX } from "./icons";
 
@@ -76,6 +76,15 @@ export function StatsSheet({ entries, users, onClose }: Props) {
   );
 
   const lifetime = useMemo(() => perPerson(entries), [entries]);
+
+  // Guests own no money — the people who ate absorbed it — so they cannot be a
+  // `perPerson` row. Counted separately, and rendered as their own line, so the
+  // counts still reconcile against the group totals above.
+  const monthOther = useMemo(
+    () => (key ? otherQty(entries.filter((e) => e.day.slice(0, 7) === key)) : 0),
+    [entries, key],
+  );
+  const lifetimeOther = useMemo(() => otherQty(entries), [entries]);
 
   if (!stats) {
     return (
@@ -187,6 +196,14 @@ export function StatsSheet({ entries, users, onClose }: Props) {
                       </span>
                     </li>
                   ))}
+                  {monthOther > 0 && (
+                    <li className="share-row share-other">
+                      <span className="share-name">Others</span>
+                      <span className="share-qty">{monthOther}</span>
+                      <span className="share-amt">&mdash;</span>
+                      <span className="share-rate" />
+                    </li>
+                  )}
                 </ul>
               </>
             )}
@@ -204,6 +221,13 @@ export function StatsSheet({ entries, users, onClose }: Props) {
                       <span className="share-amt">{money(p.amount)}</span>
                     </li>
                   ))}
+                  {lifetimeOther > 0 && (
+                    <li className="share-row share-other">
+                      <span className="share-name">Others</span>
+                      <span className="share-qty">{lifetimeOther}</span>
+                      <span className="share-amt">&mdash;</span>
+                    </li>
+                  )}
                 </ul>
               </>
             )}

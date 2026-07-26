@@ -17,8 +17,9 @@ create table if not exists public.entries (
   id         uuid         primary key default gen_random_uuid(),
   week_start date         not null references public.weeks(week_start) on delete cascade,
   day        date         not null,
-  qty        integer      not null check (qty > 0),   -- = sum of this add's shares
+  qty        integer      not null check (qty > 0),   -- = sum(shares.qty) + other_qty
   rate       numeric(10,4) not null check (rate > 0), -- price per chapati for this add
+  other_qty  integer      not null default 0 check (other_qty >= 0), -- guests; cost shared by those who ate
   amount     numeric(10,2) not null,                  -- = sum of this add's share amounts
   note       text         not null default '',
   created_at timestamptz  not null default now()

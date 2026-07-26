@@ -67,12 +67,29 @@ export function groupByDay(entries: Entry[]): DayGroup[] {
 export function needsRepair(entry: Entry): boolean {
   const shares = entry.entry_shares ?? [];
   if (shares.length === 0) return true;
-  if (shares.reduce((sum, s) => sum + s.qty, 0) !== entry.qty) return true;
+  // The guest bucket is part of the total but has no share row of its own, so
+  // it belongs on this side of the comparison. Leaving it out would flag every
+  // add that fed a guest as broken.
+  const claimed = shares.reduce((sum, s) => sum + s.qty, 0) + (entry.other_qty ?? 0);
+  if (claimed !== entry.qty) return true;
   // Money needs a tolerance rather than `!==`: both sides are float sums of
   // numeric(10,2) values, so 0.1 + 0.2 must still count as agreeing with 0.30.
   // Anything genuinely wrong is out by at least a cent.
   const amount = round2(shares.reduce((sum, s) => sum + s.amount, 0));
   return Math.abs(amount - entry.amount) > 0.005;
+}
+
+/**
+ * Chapatis eaten by guests across these adds.
+ *
+ * Kept separate from `perPerson` rather than faked as a person: guests own no
+ * money — the people who ate absorbed it — so a synthetic row would have to
+ * carry an amount of zero and would then distort any "biggest spender" order.
+ * The lists render this as its own line so the counts still reconcile against
+ * the day and week totals.
+ */
+export function otherQty(entries: Entry[]): number {
+  return entries.reduce((sum, e) => sum + (e.other_qty ?? 0), 0);
 }
 
 /** A person's name for display, never a raw uuid. */

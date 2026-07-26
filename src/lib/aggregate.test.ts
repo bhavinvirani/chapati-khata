@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Entry, EntryShare } from "../types";
-import { groupByDay, nameOf, needsRepair, perPerson } from "./aggregate";
+import { groupByDay, nameOf, needsRepair, otherQty, perPerson } from "./aggregate";
 
 const A = "user-a";
 const B = "user-b";
@@ -18,6 +18,7 @@ function entry(over: Partial<Entry> = {}): Entry {
     rate: 0.5,
     amount: 6,
     note: "",
+    other_qty: 0,
     created_at: "2026-07-22T09:00:00Z",
     entry_shares: [share(A, 7, 3.5), share(B, 5, 2.5)],
     ...over,
@@ -93,6 +94,16 @@ describe("needsRepair", () => {
     expect(needsRepair(entry({ entry_shares: [] }))).toBe(true);
   });
 
+  it("does not flag an add whose gap is exactly the guest bucket", () => {
+    // 12 to people + 10 to guests = a stored total of 22. Counting only the
+    // share rows would call this broken.
+    expect(needsRepair(entry({ qty: 22, other_qty: 10 }))).toBe(false);
+  });
+
+  it("still flags an add whose guest bucket does not close the gap", () => {
+    expect(needsRepair(entry({ qty: 22, other_qty: 4 }))).toBe(true);
+  });
+
   it("flags an add whose shares do not sum to its total", () => {
     expect(needsRepair(entry({ qty: 20 }))).toBe(true);
   });
@@ -106,6 +117,18 @@ describe("needsRepair", () => {
   it("tolerates float noise in summed money", () => {
     const shares = [share(A, 1, 0.1), share(B, 1, 0.2)];
     expect(needsRepair(entry({ qty: 2, amount: 0.3, entry_shares: shares }))).toBe(false);
+  });
+});
+
+describe("otherQty", () => {
+  it("sums the guest buckets", () => {
+    expect(otherQty([entry({ id: "e1", other_qty: 10 }), entry({ id: "e2", other_qty: 4 })])).toBe(
+      14,
+    );
+  });
+
+  it("is zero when no guests ate", () => {
+    expect(otherQty([entry()])).toBe(0);
   });
 });
 

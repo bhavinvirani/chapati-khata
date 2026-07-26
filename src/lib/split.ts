@@ -18,9 +18,15 @@ export function allocated(rows: Alloc): number {
   return Object.values(rows).reduce((sum, qty) => sum + (qty || 0), 0);
 }
 
-/** Positive means chapatis are still unassigned; negative means over-allocated. */
-export function remaining(total: number, rows: Alloc): number {
-  return total - allocated(rows);
+/**
+ * Positive means chapatis are still unassigned; negative means over-allocated.
+ *
+ * `otherQty` is the guest bucket — chapatis nobody on the list claimed. They
+ * count against the total like anyone else's, so a day is only fully allocated
+ * once the people and the guests together account for it.
+ */
+export function remaining(total: number, rows: Alloc, otherQty = 0): number {
+  return total - allocated(rows) - otherQty;
 }
 
 /**
@@ -42,11 +48,34 @@ export function evenSplit(total: number, userIds: string[]): Alloc {
 /**
  * Turn an allocation into rows to persist. People who took nothing get no row
  * at all — "who was in this add" is exactly the set of rows present.
+ *
+ * `otherQty` is the guest bucket. Guests cost real money that nobody claimed,
+ * so the people who did eat absorb it — and only them, not everyone in the
+ * split, because you should not pay for a guest on a day you were not there.
+ *
+ * The guest cost is divided in whole cents by largest remainder rather than by
+ * dividing the count, because a count rarely divides: 10 guest chapatis across
+ * 7 people is not an integer, but 500 cents is. Distributing in cents and
+ * handing the leftover ones to the earliest ids means the shares still sum to
+ * exactly what the guests cost — no cent invented, none lost. Sorting by id
+ * first makes which people absorb the leftover deterministic, so the same
+ * allocation always produces the same rows.
  */
-export function buildShares(rows: Alloc, rate: number): ShareInput[] {
-  return Object.entries(rows)
+export function buildShares(rows: Alloc, rate: number, otherQty = 0): ShareInput[] {
+  const eaters = Object.entries(rows)
     .filter(([, qty]) => qty > 0)
-    .map(([user_id, qty]) => ({ user_id, qty, amount: round2(qty * rate) }));
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (eaters.length === 0) return [];
+
+  const poolCents = Math.round(round2(otherQty * rate) * 100);
+  const each = Math.floor(poolCents / eaters.length);
+  const leftover = poolCents - each * eaters.length;
+
+  return eaters.map(([user_id, qty], i) => ({
+    user_id,
+    qty,
+    amount: round2(round2(qty * rate) + (each + (i < leftover ? 1 : 0)) / 100),
+  }));
 }
 
 /**

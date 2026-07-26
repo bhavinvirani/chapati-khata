@@ -88,7 +88,7 @@ export default function App() {
   );
 
   async function handleAdd(
-    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+    input: { qty: number; rate: number; otherQty: number; note: string; shares: ShareInput[] },
     date: string,
   ): Promise<boolean> {
     if (!user) return false;
@@ -102,7 +102,7 @@ export default function App() {
 
   async function handleSaveEdit(
     entry: Entry,
-    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+    input: { qty: number; rate: number; otherQty: number; note: string; shares: ShareInput[] },
   ) {
     if (!user) return;
     await withBusy(async () => {

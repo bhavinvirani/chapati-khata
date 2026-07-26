@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { allocated, buildShares, evenSplit, remaining, sharesAmount } from "./split";
+import { round2 } from "./util";
 
 const A = "aaaaaaaa-0000-0000-0000-000000000001";
 const B = "bbbbbbbb-0000-0000-0000-000000000002";
@@ -30,6 +31,14 @@ describe("remaining", () => {
 
   it("is negative when over-allocated", () => {
     expect(remaining(10, { [A]: 7, [B]: 5 })).toBe(-2);
+  });
+
+  it("counts the guest bucket against the total", () => {
+    expect(remaining(50, { [A]: 30, [B]: 10 }, 10)).toBe(0);
+  });
+
+  it("still leaves a remainder when the guests do not close the gap", () => {
+    expect(remaining(50, { [A]: 30 }, 10)).toBe(10);
   });
 });
 
@@ -74,6 +83,48 @@ describe("buildShares", () => {
 
   it("rounds each share to the cent", () => {
     expect(buildShares({ [A]: 3 }, 0.125)).toEqual([{ user_id: A, qty: 3, amount: 0.38 }]);
+  });
+});
+
+describe("buildShares with a guest bucket", () => {
+  // The user's own example: 50 chapatis at $0.50, six people at 5, one at 10,
+  // and 10 to guests. The guest chapatis cost $5.00, which the seven who ate
+  // absorb — 500 cents over 7 is 71 each with 3 cents left over.
+  it("spreads the guest cost across the people who ate, to the exact cent", () => {
+    const ids = [A, B, C, "d", "e", "f", "g"];
+    const rows: Record<string, number> = {};
+    ids.forEach((id, i) => (rows[id] = i === 6 ? 10 : 5));
+    const shares = buildShares(rows, 0.5, 10);
+
+    expect(shares).toHaveLength(7);
+    expect(sharesAmount(shares)).toBe(25);
+    // Every share is its own chapatis plus a guest slice, never bare qty x rate.
+    expect(shares.every((s) => s.amount > round2(s.qty * 0.5))).toBe(true);
+  });
+
+  it("gives the leftover cents to the earliest ids, so the sum is exact", () => {
+    const shares = buildShares({ [A]: 1, [B]: 1, [C]: 1 }, 0.5, 1);
+    // 50 cents over 3 people: 16 each, 2 left over.
+    expect(shares.map((s) => s.amount)).toEqual([0.67, 0.67, 0.66]);
+    expect(sharesAmount(shares)).toBe(2);
+  });
+
+  it("is deterministic regardless of the order keys were entered", () => {
+    const forwards = buildShares({ [A]: 1, [B]: 1, [C]: 1 }, 0.5, 1);
+    const backwards = buildShares({ [C]: 1, [B]: 1, [A]: 1 }, 0.5, 1);
+    expect(backwards).toEqual(forwards);
+  });
+
+  it("leaves the shares untouched when there are no guests", () => {
+    expect(buildShares({ [A]: 7, [B]: 5 }, 0.5, 0)).toEqual(buildShares({ [A]: 7, [B]: 5 }, 0.5));
+  });
+
+  it("charges nobody when guests ate but no person did", () => {
+    expect(buildShares({}, 0.5, 10)).toEqual([]);
+  });
+
+  it("gives a lone eater the whole guest cost", () => {
+    expect(buildShares({ [A]: 4 }, 0.5, 6)).toEqual([{ user_id: A, qty: 4, amount: 5 }]);
   });
 });
 

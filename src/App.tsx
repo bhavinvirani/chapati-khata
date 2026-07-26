@@ -4,7 +4,6 @@ import type { ParsedQty } from "./lib/util";
 import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
 import { cap, dayLabel, money, todayStr, weekIdOf } from "./lib/util";
-import { ALLOWED_NAMES } from "./config";
 import { useAuth } from "./hooks/useAuth";
 import { useKhataData } from "./hooks/useKhataData";
 import { useToast } from "./hooks/useToast";
@@ -171,9 +170,9 @@ export default function App() {
     ): Promise<"name" | "code" | "network" | null> => {
       const clean = name.trim().toLowerCase();
       if (ENTRY_CODE) {
-        // Local dev: validate from .env + config.ts
+        // Local dev: code from .env, name from the users table
         if (code !== ENTRY_CODE) return "code";
-        if (!ALLOWED_NAMES.includes(clean)) return "name";
+        if (!(await db.nameCanLogin(clean))) return "name";
       } else {
         // Production: validate via edge function
         try {

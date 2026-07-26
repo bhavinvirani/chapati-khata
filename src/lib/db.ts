@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { round2, money } from "./util";
 import { DEFAULT_PRICE } from "../config";
-import type { Entry, LogAction, LogRow, Week } from "../types";
+import type { Entry, LogAction, LogRow, User, Week } from "../types";
 
 // This module owns every read/write. The rest of the app never talks to
 // Supabase directly — swap this one file to change backends.
@@ -101,6 +101,25 @@ export async function validateAccess(
   });
   if (error) throw error;
   return data as { ok: boolean; error?: string };
+}
+
+/** Everyone on the list — the split composer and People sheet both need it. */
+export async function loadUsers(): Promise<User[]> {
+  const { data, error } = await supabase.from("users").select("*").order("created_at");
+  if (error) fail("loadUsers", error);
+  return (data ?? []) as User[];
+}
+
+/** Local-dev gate check. Production goes through the edge function instead. */
+export async function nameCanLogin(name: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("id")
+    .eq("name", name)
+    .eq("can_login", true)
+    .limit(1);
+  if (error) fail("nameCanLogin", error);
+  return (data ?? []).length > 0;
 }
 
 /** Record that a user signed in. */

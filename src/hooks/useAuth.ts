@@ -1,13 +1,12 @@
 import { useCallback, useState } from "react";
-import { ALLOWED_NAMES } from "../config";
 
 export function useAuth() {
   const [user, setUser] = useState<string | null>(null);
 
-  /** Restore a previously saved name (checks allowlist for safety). */
+  /** Restore a previously saved name. Validation happens at the gate. */
   const restoreUser = useCallback(() => {
     const saved = localStorage.getItem("khata.name");
-    if (saved && ALLOWED_NAMES.includes(saved)) setUser(saved);
+    if (saved) setUser(saved);
   }, []);
 
   /** Set the signed-in user. Call AFTER validation (Gate / edge function). */

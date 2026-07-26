@@ -98,11 +98,6 @@ jobs:
         # removes a Docker dependency from CI. Idempotent redeploy either way.
         if: steps.check.outputs.ready == 'true'
         run: supabase functions deploy validate-access --use-api --yes
-      - name: Sync ALLOWED_NAMES to Supabase secrets
-        # Public list already shipped in the frontend bundle — no secrecy, so
-        # safe to sync unconditionally. Single source of truth: allowed-names.json.
-        if: steps.check.outputs.ready == 'true'
-        run: supabase secrets set ALLOWED_NAMES="$(jq -r 'join(",")' allowed-names.json)" --yes
 
   build:
     needs: supabase-deploy

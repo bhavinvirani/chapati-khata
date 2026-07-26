@@ -2641,7 +2641,17 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
             const mayRevoke = canRevokeLogin(u, actor, users);
             return (
               <li key={u.id} className="ppl-row">
-                <span className="ppl-name">{cap(u.name)}</span>
+                <span className="ppl-name">
+                  {cap(u.name)}
+                  {u.name === actor && <span className="ppl-you">you</span>}
+                  {/* `title` never renders on a phone, and this is the sheet's
+                      one safety-critical control — say why it is blocked. */}
+                  {u.can_login && !mayRevoke && (
+                    <span className="ppl-why">
+                      {u.name === actor ? "can't remove your own access" : "last login"}
+                    </span>
+                  )}
+                </span>
 
                 <input
                   type="checkbox"
@@ -2674,7 +2684,7 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
 
                 <button
                   className="icon-btn"
-                  disabled={locked}
+                  disabled={locked || (u.can_login && !mayRevoke)}
                   onClick={() => askDelete(u)}
                   aria-label={`Delete ${u.name}`}
                 >
@@ -2707,7 +2717,10 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
 
         {pendingDelete && (
           <div className="del-confirm">
-            <span>Delete {cap(pendingDelete.name)}? They have no entries, so nothing is lost.</span>
+            <span>
+              Delete {cap(pendingDelete.name)}? They have no entries, so no history is lost — but
+              their access goes with them.
+            </span>
             <div className="sheet-a">
               <button className="btn btn-ghost" onClick={() => setPendingDelete(null)}>
                 Keep
@@ -2820,6 +2833,20 @@ Append to `src/styles.css`:
   font-size: 12.5px;
   color: var(--soft);
   line-height: 1.5;
+}
+.ppl-you {
+  margin-left: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.ppl-why {
+  display: block;
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-top: 2px;
 }
 ```
 

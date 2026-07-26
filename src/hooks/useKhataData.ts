@@ -4,7 +4,7 @@ import * as db from "../lib/db";
 import { ensureAuth } from "../lib/supabase";
 import { round2 } from "../lib/util";
 
-export function useKhataData(onBooted: () => void) {
+export function useKhataData(onBooted: () => void | Promise<void>) {
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [paidEntries, setPaidEntries] = useState<Entry[]>([]);
@@ -53,7 +53,7 @@ export function useKhataData(onBooted: () => void) {
     (async () => {
       try {
         await ensureAuth();
-        onBooted();
+        await onBooted();
         setReady(true);
         await load();
       } catch {

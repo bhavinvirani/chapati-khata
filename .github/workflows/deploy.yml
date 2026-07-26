@@ -53,7 +53,7 @@ jobs:
           if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::SUPABASE_ACCESS_TOKEN/SUPABASE_DB_PASSWORD not set on the production environment yet — skipping migrations, function deploy, and secret sync. See the setup steps at the top of this file."
+            echo "::warning::SUPABASE_ACCESS_TOKEN/SUPABASE_DB_PASSWORD not set on the production environment yet — skipping migrations and function deploy. See the setup steps at the top of this file."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Guard against unmarked destructive migrations

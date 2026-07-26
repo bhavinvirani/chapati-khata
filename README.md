@@ -73,11 +73,9 @@ same URL in a second browser/phone - changes should appear live in both.
 
 ## Step 3 - Set your group's names and price
 
-Names live in [`allowed-names.json`](allowed-names.json) at the repo root:
-
-```json
-["bhavin", "abhishek", "deven", "parth", "pratik", "hitanshi", "samir"]
-```
+Who can sign in lives in the `users` table, managed from the **People** sheet
+inside the app - no file to edit, no redeploy needed. Add or remove someone,
+or toggle their login access, and it takes effect right away.
 
 Price and currency live in [`src/config.ts`](src/config.ts):
 
@@ -86,9 +84,7 @@ export const DEFAULT_PRICE = 0.5; // per chapati
 export const CURRENCY = "$";
 ```
 
-Names are matched case-insensitively. To add or remove someone, just edit
-`allowed-names.json` and redeploy - CI keeps the production sign-in gate's
-allowlist in sync with this same file automatically.
+Names are matched case-insensitively.
 
 **Price tip:** the default price applies to every entry. If one day had a
 different rate, type it in the add box as `count x price`, e.g. `50x0.75`
@@ -177,7 +173,7 @@ Tap the download icon in the app header any time to save a full JSON snapshot
 
 ```
 src/
-  config.ts              # names, price, currency
+  config.ts              # price, currency
   types.ts               # shared TypeScript types
   hooks/
     useAuth.ts           # sign-in / sign-out state

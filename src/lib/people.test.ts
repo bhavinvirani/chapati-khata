@@ -9,6 +9,8 @@ function user(name: string, over: Partial<User> = {}): User {
     in_split: true,
     can_login: true,
     created_at: "2026-07-01T00:00:00Z",
+    splitwise_email: null,
+    splitwise_user_id: null,
     ...over,
   };
 }

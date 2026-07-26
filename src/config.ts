@@ -6,3 +6,5 @@
 
 export const DEFAULT_PRICE = 0.5; // price per chapati at the default rate
 export const CURRENCY = "$";
+export const SPLITWISE_CURRENCY = "CAD";
+export const SPLITWISE_CATEGORY_NAME = "Groceries";

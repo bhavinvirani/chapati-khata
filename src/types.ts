@@ -6,6 +6,7 @@ export interface Week {
   week_start: string; // 'YYYY-MM-DD' (Monday) — primary key
   paid: boolean;
   paid_at: string | null; // ISO timestamp
+  settlement_id: string | null; // FK -> settlements.id, null for weeks paid before this feature or never paid
 }
 
 export interface User {
@@ -14,6 +15,19 @@ export interface User {
   in_split: boolean; // appears in the split composer
   can_login: boolean; // passes the gate
   created_at: string; // ISO timestamp — also the composer's row order
+  splitwise_email: string | null; // what's typed in the People sheet
+  splitwise_user_id: string | null; // resolved id from the last successful link check — a UI hint only, never trusted at push time
+}
+
+export interface Settlement {
+  id: string; // uuid
+  created_at: string; // ISO timestamp
+  actor: string;
+  device_id: string | null;
+  splitwise_payer_user_id: string | null;
+  splitwise_expense_id: string | null;
+  splitwise_status: "unknown" | null;
+  splitwise_pushed_at: string | null;
 }
 
 export interface EntryShare {
@@ -49,7 +63,9 @@ export type LogAction =
   | "user_split_on"
   | "user_split_off"
   | "user_login_on"
-  | "user_login_off";
+  | "user_login_off"
+  | "splitwise_push"
+  | "splitwise_unpush";
 
 export interface LogRow {
   id: string;
@@ -72,6 +88,7 @@ export interface WeekView extends Week {
   entries: Entry[];
   total: number;
   count: number;
+  settlement: Settlement | null;
 }
 
 export interface Confirm {

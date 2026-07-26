@@ -113,7 +113,7 @@ export function SplitEditor({
           <li className="split-row">
             <span className="split-name">
               Others
-              <span className="split-hint">guests — cost shared by everyone who ate</span>
+              <span className="split-hint">cost shared by everyone</span>
             </span>
             <input
               className="in split-qty"

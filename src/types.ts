@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 // Row shapes mirror the Postgres tables in supabase/schema.sql.
 
 export interface Week {
@@ -74,6 +76,8 @@ export interface WeekView extends Week {
 export interface Confirm {
   title: string;
   body: string;
+  /** Optional rich block under the body — e.g. the pre-payment breakdown. */
+  detail?: ReactNode;
   cta: string;
   tone: "go" | "plain";
   onYes: () => void;

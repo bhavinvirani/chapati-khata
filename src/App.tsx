@@ -21,6 +21,7 @@ import { EditSheet } from "./components/EditSheet";
 import { LogView } from "./components/LogView";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { StatsSheet } from "./components/StatsSheet";
+import { SettleSummary } from "./components/SettleSummary";
 import { PeopleSheet } from "./components/PeopleSheet";
 import { Toast } from "./components/Toast";
 import { Roti } from "./components/icons";
@@ -242,12 +243,14 @@ export default function App() {
               onSettle={() =>
                 setConfirm({
                   title: "Settle every open week?",
-                  body:
-                    "Marks all " +
-                    unpaid.length +
-                    " unpaid weeks paid — " +
-                    money(owed) +
-                    " total.",
+                  body: `Paying ${money(owed)} across ${unpaid.length} weeks. Here is what makes it up — entries lock once paid, and you can reopen later.`,
+                  detail: (
+                    <SettleSummary
+                      entries={unpaid.flatMap((wk) => wk.entries)}
+                      users={users}
+                      weekIds={unpaid.map((wk) => wk.week_start)}
+                    />
+                  ),
                   cta: "Mark all paid",
                   tone: "go",
                   onYes: handleSettleAll,
@@ -288,7 +291,14 @@ export default function App() {
                         onPay={() =>
                           setConfirm({
                             title: "Mark this week paid?",
-                            body: "Entries will be locked. You can reopen it later if needed.",
+                            body: `Paying ${money(w.total)}. Here is what makes it up — entries lock once paid, and you can reopen later.`,
+                            detail: (
+                              <SettleSummary
+                                entries={w.entries}
+                                users={users}
+                                weekIds={[w.week_start]}
+                              />
+                            ),
                             cta: "Mark paid",
                             tone: "go",
                             onYes: () => handleMarkPaid(w.week_start, true),

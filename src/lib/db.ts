@@ -299,6 +299,62 @@ export async function settleAll(weekIds: string[], actor: string, deviceId: stri
   }
 }
 
+// ── people ──
+
+/** Add someone. Names are lowercased and trimmed, as the gate expects. */
+export async function addPerson(name: string, actor: string, deviceId: string): Promise<void> {
+  const clean = name.trim().toLowerCase();
+  const { error } = await supabase.from("users").insert({ name: clean });
+  if (error) fail("addPerson", error);
+  await logAction({ actor, action: "user_add", target: clean, device_id: deviceId });
+}
+
+/** Flip one of a person's two switches. */
+export async function setPersonFlag(
+  user: User,
+  field: "in_split" | "can_login",
+  value: boolean,
+  actor: string,
+  deviceId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("users")
+    .update({ [field]: value })
+    .eq("id", user.id);
+  if (error) fail("setPersonFlag", error);
+  const action: LogAction =
+    field === "in_split"
+      ? value
+        ? "user_split_on"
+        : "user_split_off"
+      : value
+        ? "user_login_on"
+        : "user_login_off";
+  await logAction({ actor, action, target: user.name, device_id: deviceId });
+}
+
+/**
+ * Permanently remove someone. Only reachable for a person holding no shares —
+ * the database refuses the rest via `on delete restrict`, so a bug here becomes
+ * an error rather than orphaned history.
+ */
+export async function deletePerson(user: User, actor: string, deviceId: string): Promise<void> {
+  const { error } = await supabase.from("users").delete().eq("id", user.id);
+  if (error) fail("deletePerson", error);
+  await logAction({ actor, action: "user_delete", target: user.name, device_id: deviceId });
+}
+
+/** Does this person appear in any add? Decides whether deletion is offered. */
+export async function hasShares(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("entry_shares")
+    .select("entry_id")
+    .eq("user_id", userId)
+    .limit(1);
+  if (error) fail("hasShares", error);
+  return (data ?? []).length > 0;
+}
+
 // ── realtime ──
 /** Fire `onChange` whenever any of the watched tables changes. Returns cleanup. */
 export function subscribeChanges(onChange: () => void): () => void {

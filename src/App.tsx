@@ -21,6 +21,7 @@ import { EditSheet } from "./components/EditSheet";
 import { LogView } from "./components/LogView";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { StatsSheet } from "./components/StatsSheet";
+import { PeopleSheet } from "./components/PeopleSheet";
 import { Toast } from "./components/Toast";
 import { Roti } from "./components/icons";
 
@@ -59,6 +60,7 @@ export default function App() {
   const [editing, setEditing] = useState<Entry | null>(null);
   const [busy, setBusy] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showPeople, setShowPeople] = useState(false);
   const busyRef = useRef(false);
 
   const device = useMemo(() => getDeviceId(), []);
@@ -196,6 +198,7 @@ export default function App() {
           userName={user}
           onExport={exportJSON}
           onRefresh={load}
+          onPeopleClick={() => setShowPeople(true)}
           onUserClick={() =>
             setConfirm({
               title: "Signed in as " + cap(user),
@@ -337,6 +340,18 @@ export default function App() {
       {confirm && <ConfirmDialog confirm={confirm} busy={busy} onClose={clearConfirm} />}
 
       {showStats && <StatsSheet entries={allEntries} onClose={() => setShowStats(false)} />}
+
+      {showPeople && user && (
+        <PeopleSheet
+          users={users}
+          actor={user}
+          busy={busy}
+          deviceId={device}
+          onClose={() => setShowPeople(false)}
+          onChanged={load}
+          onError={flash}
+        />
+      )}
 
       {toast && <Toast message={toast} />}
     </div>

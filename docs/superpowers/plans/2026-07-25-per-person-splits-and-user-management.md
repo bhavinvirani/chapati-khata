@@ -2024,6 +2024,8 @@ subtotal, and a half-written add offers to be repaired.
 
 **Files:**
 
+- Modify: `src/lib/aggregate.ts`
+- Test: `src/lib/aggregate.test.ts`
 - Modify: `src/components/WeekCard.tsx`
 - Modify: `src/hooks/useKhataData.ts`
 - Modify: `src/App.tsx`
@@ -2033,6 +2035,54 @@ subtotal, and a half-written add offers to be repaired.
 
 - Consumes: `groupByDay`, `perPerson`, `needsRepair`, `nameOf` (Task 3)
 - Produces: `<WeekCard>` gains `users` and `onDiscard` props
+
+- [ ] **Step 0: Make `needsRepair` check the money half of the invariant**
+
+`needsRepair` currently compares only qty sums, which leaves half of §6.1
+unguarded. A rate-only edit rewrites every share's `amount` but no share's
+`qty`; if the entry-row update then fails, `sum(shares.qty)` still equals
+`entry.qty`, nothing is flagged, and `entry.amount` disagrees with the shares
+permanently. The damage is visible: `perPerson` accumulates share amounts while
+week totals accumulate `entry.amount`, so the two silently stop agreeing.
+
+Add the amount comparison in `src/lib/aggregate.ts`:
+
+```ts
+export function needsRepair(entry: Entry): boolean {
+  const shares = entry.entry_shares ?? [];
+  if (shares.length === 0) return true;
+  if (shares.reduce((sum, s) => sum + s.qty, 0) !== entry.qty) return true;
+  // Money needs a tolerance rather than `!==`: both sides are float sums of
+  // numeric(10,2) values, so 0.1 + 0.2 must still count as agreeing with 0.30.
+  // Anything genuinely wrong is out by at least a cent.
+  const amount = round2(shares.reduce((sum, s) => sum + s.amount, 0));
+  return Math.abs(amount - entry.amount) > 0.005;
+}
+```
+
+And two tests in the `needsRepair` block of `src/lib/aggregate.test.ts`:
+
+```ts
+// A rate-only edit rewrites every share's amount but no share's qty. If the
+// entry-row update then fails, the qty check alone would see nothing wrong.
+it("flags an add whose share amounts do not sum to its amount", () => {
+  expect(needsRepair(entry({ amount: 9 }))).toBe(true);
+});
+
+it("tolerates float noise in summed money", () => {
+  const shares = [share(A, 1, 0.1), share(B, 1, 0.2)];
+  expect(needsRepair(entry({ qty: 2, amount: 0.3, entry_shares: shares }))).toBe(false);
+});
+```
+
+Run: `npx vitest run src/lib/aggregate.test.ts` — expect 14 tests. The whole
+suite becomes 43.
+
+Note what this does **not** close: if the prune fails while the kept people's
+aggregate qty happens to equal the old total, the leftover row for a dropped
+person goes undetected, and at a clean rate its amount coincides too. No
+client-side ordering fixes that — only a transactional RPC would. It is recorded
+as a known limit rather than papered over.
 
 - [ ] **Step 1: Rewrite WeekCard**
 

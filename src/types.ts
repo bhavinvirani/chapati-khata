@@ -63,6 +63,7 @@ export interface LogRow {
   note_before: string | null;
   note_after: string | null;
   target: string | null; // the person a user_* action refers to
+  detail: string | null; // what changed, in words
   device_id: string | null; // breadcrumb — not shown in the UI
 }
 

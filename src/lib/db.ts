@@ -22,6 +22,7 @@ async function logAction(row: {
   note_before?: string | null;
   note_after?: string | null;
   target?: string | null;
+  detail?: string | null;
   device_id?: string | null;
 }): Promise<void> {
   const { error } = await supabase.from("logs").insert({
@@ -34,6 +35,7 @@ async function logAction(row: {
     note_before: row.note_before ?? null,
     note_after: row.note_after ?? null,
     target: row.target ?? null,
+    detail: row.detail ?? null,
     device_id: row.device_id ?? null,
   });
   if (error) fail("logAction", error);
@@ -169,6 +171,7 @@ export async function addEntry(
   input: EntryInput,
   actor: string,
   deviceId: string,
+  detail: string,
 ): Promise<void> {
   await ensureWeek(weekId);
 
@@ -203,6 +206,7 @@ export async function addEntry(
     week_start: weekId,
     day,
     qty_after: input.qty,
+    detail,
     device_id: deviceId,
   });
 }
@@ -220,6 +224,7 @@ export async function editEntry(
   input: EntryInput,
   actor: string,
   deviceId: string,
+  detail: string,
 ): Promise<void> {
   const { error: upErr } = await supabase.from("entry_shares").upsert(
     input.shares.map((s) => ({ ...s, entry_id: entry.id })),
@@ -261,11 +266,17 @@ export async function editEntry(
     qty_after: input.qty,
     note_before: noteChanged ? entry.note : null,
     note_after: noteChanged ? input.note : null,
+    detail,
     device_id: deviceId,
   });
 }
 
-export async function deleteEntry(entry: Entry, actor: string, deviceId: string): Promise<void> {
+export async function deleteEntry(
+  entry: Entry,
+  actor: string,
+  deviceId: string,
+  detail: string,
+): Promise<void> {
   const { error } = await supabase.from("entries").delete().eq("id", entry.id);
   if (error) fail("deleteEntry", error);
   await logAction({
@@ -274,6 +285,7 @@ export async function deleteEntry(entry: Entry, actor: string, deviceId: string)
     week_start: entry.week_start,
     day: entry.day,
     qty_before: entry.qty,
+    detail,
     device_id: deviceId,
   });
 }

@@ -282,10 +282,24 @@ of attribution.
 ### 7.3 The repair state
 
 An add whose shares are missing, or whose share quantities do not sum to its
-`qty`, renders as **⚠ needs repair** with two actions:
+`qty`, or whose share amounts do not sum to its `amount`, renders as
+**⚠ needs repair** with two actions:
 
-- **Finish split** — opens the editor with the total locked
-- **Discard** — deletes the add
+- **Finish split** — opens the editor, with the total editable
+- **Discard** — deletes the add, behind a confirmation
+
+The total stays editable rather than locked: a broken add's own total may be the
+part that is wrong, so locking it would leave some broken adds unrepairable.
+
+Both checks matter. An earlier draft compared only quantities, which left a
+rate-only edit whose final write failed permanently undetected — the shares
+would carry new money while the entry carried old, and the per-person figures
+would silently stop agreeing with the week total.
+
+The actions are offered only while the week is unpaid. Repairing changes the
+add's `qty` and `amount`, so on a paid week it would move a total already handed
+to the roti provider; the warning still shows there, naming reopening as the way
+out.
 
 This check runs over already-loaded data; it needs no extra query. It is the
 same half-split state rejected as a feature in §4.1, present only as an error

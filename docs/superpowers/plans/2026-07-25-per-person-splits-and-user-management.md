@@ -1016,7 +1016,9 @@ as before.
 - Modify: `src/config.ts`
 - Modify: `src/hooks/useAuth.ts`
 - Modify: `src/App.tsx` (gate path only)
+- Modify: `src/hooks/useKhataData.ts` (await the now-async `onBooted`)
 - Modify: `.github/workflows/deploy.yml`
+- Modify: `README.md` (its allowlist instructions point at the deleted file)
 - Delete: `allowed-names.json`
 
 **Interfaces:**
@@ -1125,26 +1127,49 @@ export const DEFAULT_PRICE = 0.5; // price per chapati at the default rate
 export const CURRENCY = "$";
 ```
 
-In `src/hooks/useAuth.ts`, drop the `ALLOWED_NAMES` import and let `restoreUser`
-restore the saved name unconditionally. The gate is what validates a name; a
-restored session that shouldn't exist is caught on the next sign-in, and
-`localStorage` is not a security boundary in an app whose trust model is a
-shared code:
+In `src/hooks/useAuth.ts`, drop the `ALLOWED_NAMES` import and have `restoreUser`
+re-check the saved name against the database instead:
 
 ```ts
 import { useCallback, useState } from "react";
+import * as db from "../lib/db";
 
 export function useAuth() {
   const [user, setUser] = useState<string | null>(null);
 
-  /** Restore a previously saved name. Validation happens at the gate. */
-  const restoreUser = useCallback(() => {
+  /**
+   * Restore a previously saved name, re-checking it against the users table.
+   *
+   * This check is the only thing that makes revoking someone's access take
+   * effect. `khata.name` is read nowhere else and signing out is user-initiated,
+   * so without it a revoked person keeps full access on their existing device
+   * indefinitely — there is no "next sign-in" to catch them at.
+   *
+   * A definitive no clears the saved name. A thrown error does not: the app has
+   * to keep working offline, and an unreachable server is not a revocation.
+   */
+  const restoreUser = useCallback(async () => {
     const saved = localStorage.getItem("khata.name");
-    if (saved) setUser(saved);
+    if (!saved) return;
+    try {
+      if (!(await db.nameCanLogin(saved))) {
+        localStorage.removeItem("khata.name");
+        return;
+      }
+    } catch {
+      // Offline or server error — keep the session rather than lock them out.
+    }
+    setUser(saved);
   }, []);
 ```
 
 Leave `signIn`, `signOut` and the return object exactly as they are.
+
+`restoreUser` is passed to `useKhataData` as `onBooted`, so that hook must now
+await it: widen the parameter to `() => void | Promise<void>` and change
+`onBooted()` to `await onBooted()` in the boot effect. Awaiting matters — it runs
+before `setChecking(false)`, so a returning user never sees the gate flash while
+the check is in flight.
 
 In `src/App.tsx`, remove the `import { ALLOWED_NAMES } from "./config";` line and
 change the local-dev branch of `handleGateSubmit` from the array check to the

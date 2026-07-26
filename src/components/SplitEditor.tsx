@@ -1,6 +1,6 @@
 import type { User } from "../types";
 import type { Alloc } from "../lib/split";
-import { allocated, evenSplit, remaining } from "../lib/split";
+import { allocated, evenSplit } from "../lib/split";
 import { cap } from "../lib/util";
 
 interface Props {
@@ -21,7 +21,10 @@ interface Props {
  * far off it is.
  */
 export function SplitEditor({ members, total, rows, onChange, lastAdd, disabled }: Props) {
-  const left = remaining(total, rows);
+  // Count only the boxes on screen. The parent gates on the same projection, so
+  // a stale key for someone just removed from the split cannot make the readout
+  // and the button contradict each other.
+  const left = total - members.reduce((sum, m) => sum + (rows[m.id] || 0), 0);
 
   function setOne(id: string, raw: string) {
     const digits = raw.replace(/[^0-9]/g, "");

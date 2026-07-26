@@ -1,6 +1,4 @@
 import { supabase } from "./supabase";
-import { round2 } from "./util";
-import { DEFAULT_PRICE } from "../config";
 import { sharesAmount } from "./split";
 import type { ShareInput } from "./split";
 import type { Entry, LogAction, LogRow, User, Week } from "../types";
@@ -205,31 +203,59 @@ export async function addEntry(
   });
 }
 
-/** Set an exact quantity, preserving the day's effective (blended) price. */
+/**
+ * Replace an add's total, rate, note and allocation.
+ *
+ * Ordering rule: never delete existing shares before their replacements are
+ * written. No ordering avoids a transient mismatch without a transaction, but
+ * this one makes the transient state an over-allocation — visible and
+ * repairable — rather than a loss of attribution.
+ */
 export async function editEntry(
   entry: Entry,
-  newQty: number,
-  newNote: string,
+  input: EntryInput,
   actor: string,
   deviceId: string,
 ): Promise<void> {
-  const eff = entry.qty ? entry.amount / entry.qty : DEFAULT_PRICE;
-  const amount = round2(newQty * eff);
+  const { error: upErr } = await supabase.from("entry_shares").upsert(
+    input.shares.map((s) => ({ ...s, entry_id: entry.id })),
+    {
+      onConflict: "entry_id,user_id",
+    },
+  );
+  if (upErr) fail("editEntry/shares", upErr);
+
+  // Prune anyone dropped from the allocation. `keep` is never empty in practice
+  // — the editor blocks saving a total of zero — but an empty `in ()` list is
+  // invalid PostgREST, so branch rather than emit one.
+  const keep = input.shares.map((s) => s.user_id);
+  const prune = supabase.from("entry_shares").delete().eq("entry_id", entry.id);
+  const { error: delErr } = await (keep.length > 0
+    ? prune.not("user_id", "in", `(${keep.join(",")})`)
+    : prune);
+  if (delErr) fail("editEntry/prune", delErr);
+
   const { error } = await supabase
     .from("entries")
-    .update({ qty: newQty, amount, note: newNote })
+    .update({
+      qty: input.qty,
+      rate: input.rate,
+      amount: sharesAmount(input.shares),
+      note: input.note,
+    })
     .eq("id", entry.id);
   if (error) fail("editEntry", error);
-  const noteChanged = entry.note !== newNote;
+
+  const noteChanged = entry.note !== input.note;
   await logAction({
     actor,
     action: "edit",
     week_start: entry.week_start,
     day: entry.day,
     qty_before: entry.qty,
-    qty_after: newQty,
+    qty_after: input.qty,
     note_before: noteChanged ? entry.note : null,
-    note_after: noteChanged ? newNote : null,
+    note_after: noteChanged ? input.note : null,
     device_id: deviceId,
   });
 }

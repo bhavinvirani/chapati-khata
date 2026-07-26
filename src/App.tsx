@@ -98,10 +98,13 @@ export default function App() {
     });
   }
 
-  async function handleSaveEdit(entry: Entry, qty: number, note: string) {
+  async function handleSaveEdit(
+    entry: Entry,
+    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+  ) {
     if (!user) return;
     await withBusy(async () => {
-      await db.editEntry(entry, qty, note.trim(), user, device);
+      await db.editEntry(entry, { ...input, note: input.note.trim() }, user, device);
       setEditing(null);
       flash("Entry updated");
     });
@@ -313,6 +316,7 @@ export default function App() {
       {editing && (
         <EditSheet
           entry={editing}
+          users={users}
           busy={busy}
           onClose={() => setEditing(null)}
           onSave={handleSaveEdit}

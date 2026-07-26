@@ -2914,30 +2914,47 @@ sheet:
 
 ```tsx
 {
-  monthPeople.length > 0 && (
+  {
+    /* Guarded separately. A month with no split entries must not take the
+      lifetime figures down with it — they have nothing to do with which
+      month is selected. */
+  }
+  (monthPeople.length > 0 || lifetime.length > 0) && (
     <div className="stats-people">
-      <div className="week-people-t">This month, per person</div>
-      <ul className="share-rows">
-        {monthPeople.map((p) => (
-          <li key={p.userId} className="share-row">
-            <span className="share-name">{cap(nameOf(users, p.userId))}</span>
-            <span className="share-qty">{p.qty}</span>
-            <span className="share-amt">{money(p.amount)}</span>
-            <span className="share-rate">{money(p.qty > 0 ? round2(p.amount / p.qty) : 0)}/ea</span>
-          </li>
-        ))}
-      </ul>
+      {monthPeople.length > 0 && (
+        <>
+          <div className="week-people-t">This month, per person</div>
+          <ul className="share-rows">
+            {monthPeople.map((p) => (
+              <li key={p.userId} className="share-row">
+                <span className="share-name">{cap(nameOf(users, p.userId))}</span>
+                <span className="share-qty">{p.qty}</span>
+                <span className="share-amt">{money(p.amount)}</span>
+                <span className="share-rate">
+                  {money(p.qty > 0 ? round2(p.amount / p.qty) : 0)}/ea
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
-      <div className="week-people-t stats-life">Lifetime</div>
-      <ul className="share-rows">
-        {lifetime.map((p) => (
-          <li key={p.userId} className="share-row">
-            <span className="share-name">{cap(nameOf(users, p.userId))}</span>
-            <span className="share-qty">{p.qty}</span>
-            <span className="share-amt">{money(p.amount)}</span>
-          </li>
-        ))}
-      </ul>
+      {lifetime.length > 0 && (
+        <>
+          <div className={"week-people-t" + (monthPeople.length > 0 ? " stats-life" : "")}>
+            Lifetime
+          </div>
+          <ul className="share-rows">
+            {lifetime.map((p) => (
+              <li key={p.userId} className="share-row">
+                <span className="share-name">{cap(nameOf(users, p.userId))}</span>
+                <span className="share-qty">{p.qty}</span>
+                <span className="share-amt">{money(p.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

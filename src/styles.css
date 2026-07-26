@@ -203,7 +203,6 @@ html, body, #root{ min-height:100%; }
   .btn.btn-go:hover:not(:disabled){ background:#57893F; }
   .btn.btn-ghost:hover:not(:disabled){ background:var(--line); }
   .btn.btn-pay:hover:not(:disabled){ background:var(--marigold-tint); }
-  .row[role="button"]:hover{ background:var(--paper); }
   .history-toggle:hover{ background:#F5E6B8; }
   .stats-nav-btn:hover:not(:disabled){ background:var(--line-2); }
 }

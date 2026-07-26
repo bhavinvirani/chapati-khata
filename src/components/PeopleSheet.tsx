@@ -199,19 +199,29 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
                 className="btn btn-danger"
                 disabled={locked}
                 onClick={() => {
-                  // `askDelete`'s check is stale by the time this fires — the
-                  // confirm card sits open long enough for another device to
-                  // revoke a login out from under it. Re-run the same
-                  // authority against the current `users` before writing.
-                  if (!canDeletePerson(pendingDelete, actor, users, pendingHeld)) {
+                  // `pendingDelete` is a snapshot from when `askDelete` ran, and
+                  // `canDeletePerson` branches on `target.can_login` from that
+                  // snapshot. The confirm card can sit open long enough for
+                  // another device to grant a login to a target that looked
+                  // like a normal, `can_login: false` person at snapshot time
+                  // while revoking every other login — which would let this
+                  // check wave through deleting the group's last login-holder.
+                  // Look the target up fresh by id and check that instead.
+                  const live = users.find((u) => u.id === pendingDelete.id);
+                  if (!live) {
+                    setPendingDelete(null);
+                    onError(`${cap(pendingDelete.name)} is already gone.`);
+                    return;
+                  }
+                  if (!canDeletePerson(live, actor, users, pendingHeld)) {
                     setPendingDelete(null);
                     onError(
-                      `${cap(pendingDelete.name)} can no longer be deleted — access changed while this was open.`,
+                      `${cap(live.name)} can no longer be deleted — access changed while this was open.`,
                     );
                     return;
                   }
                   run(async () => {
-                    await db.deletePerson(pendingDelete, actor, deviceId);
+                    await db.deletePerson(live, actor, deviceId);
                     setPendingDelete(null);
                   });
                 }}

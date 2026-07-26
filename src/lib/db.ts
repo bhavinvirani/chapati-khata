@@ -1,8 +1,9 @@
 import { supabase } from "./supabase";
 import { sharesAmount } from "./split";
 import type { ShareInput } from "./split";
-import type { Entry, LogAction, LogRow, User, Week } from "../types";
-import { normalizeName } from "./util";
+import type { SplitwisePerson } from "./splitwise";
+import type { Entry, LogAction, LogRow, Settlement, User, Week } from "../types";
+import { cap, money, normalizeName } from "./util";
 
 // This module owns every read/write. The rest of the app never talks to
 // Supabase directly — swap this one file to change backends.
@@ -54,15 +55,18 @@ export async function loadActive(): Promise<{
   entries: Entry[];
   users: User[];
   logs: LogRow[];
+  settlements: Settlement[];
 }> {
   // Independent queries — run them together.
-  const [w, l, users] = await Promise.all([
+  const [w, l, users, s] = await Promise.all([
     supabase.from("weeks").select("*"),
     supabase.from("logs").select("*").order("ts", { ascending: false }).limit(LOG_PAGE),
     loadUsers(),
+    supabase.from("settlements").select("*"),
   ]);
   if (w.error) fail("load weeks", w.error);
   if (l.error) fail("load logs", l.error);
+  if (s.error) fail("load settlements", s.error);
   const weeks = (w.data ?? []) as Week[];
 
   // Entries depend on weeks result — fetch only for unpaid weeks.
@@ -74,7 +78,13 @@ export async function loadActive(): Promise<{
     entries = (e.data ?? []) as Entry[];
   }
 
-  return { weeks, entries, users, logs: (l.data ?? []) as LogRow[] };
+  return {
+    weeks,
+    entries,
+    users,
+    logs: (l.data ?? []) as LogRow[],
+    settlements: (s.data ?? []) as Settlement[],
+  };
 }
 
 /** Fetch entries for paid weeks (called on demand when history is expanded). */
@@ -437,6 +447,121 @@ export async function hasShares(userId: string): Promise<boolean> {
   return (data ?? []).length > 0;
 }
 
+// ── Splitwise ──
+
+/** Check a Splitwise email against the live group's members (§4.1/§9.1). */
+export async function checkSplitwiseLink(
+  email: string,
+): Promise<{ linked: boolean; splitwiseUserId: string | null }> {
+  const { data, error } = await supabase.functions.invoke("splitwise", {
+    body: { action: "link", email },
+  });
+  if (error) fail("checkSplitwiseLink", error);
+  const result = data as { linked: boolean; splitwise_user_id?: string };
+  return { linked: result.linked, splitwiseUserId: result.splitwise_user_id ?? null };
+}
+
+/**
+ * Save (or clear) a person's Splitwise email, re-checking it against the
+ * live group every time (§4.2) — the stored `splitwise_user_id` is only a
+ * People-sheet hint, never trusted at push time.
+ */
+export async function setSplitwiseEmail(user: User, email: string): Promise<void> {
+  const clean = email.trim();
+  const link = clean ? await checkSplitwiseLink(clean) : { linked: false, splitwiseUserId: null };
+  const { error } = await supabase
+    .from("users")
+    .update({ splitwise_email: clean || null, splitwise_user_id: link.splitwiseUserId })
+    .eq("id", user.id);
+  if (error) fail("setSplitwiseEmail", error);
+}
+
+/** Delete a Splitwise expense. Treats "already gone" (per the edge
+ * function) the same as a fresh success. */
+export async function deleteSplitwiseExpense(
+  expenseId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("splitwise", {
+    body: { action: "delete", expense_id: expenseId },
+  });
+  if (error) return { ok: false, error: "network" };
+  return data as { ok: boolean; error?: string };
+}
+
+export type PushResult =
+  | { ok: true; expenseId: string }
+  | { ok: false; status?: "unknown"; error?: string };
+
+/**
+ * Push a settlement to Splitwise. On an ambiguous outcome (network error,
+ * dropped connection) the settlement is marked `splitwise_status: 'unknown'`
+ * rather than silently retried (§4.9) — the caller is expected to require an
+ * explicit re-confirmation before calling this again for the same settlement.
+ */
+export async function pushSettlement(
+  settlementId: string,
+  payer: User,
+  people: SplitwisePerson[],
+  totalCost: number,
+  description: string,
+  date: string,
+  actor: string,
+  deviceId: string,
+  weekIds: string[],
+): Promise<PushResult> {
+  if (!payer.splitwise_email) {
+    throw new Error("The chosen payer isn't linked to Splitwise.");
+  }
+
+  let invokeFailed = false;
+  let data: { ok: boolean; expense_id?: string; error?: string } | undefined;
+  try {
+    const res = await supabase.functions.invoke("splitwise", {
+      body: { action: "push", payerEmail: payer.splitwise_email, people, totalCost, description, date },
+    });
+    if (res.error) invokeFailed = true;
+    else data = res.data as { ok: boolean; expense_id?: string; error?: string };
+  } catch {
+    invokeFailed = true;
+  }
+
+  if (invokeFailed || !data) {
+    const { error } = await supabase
+      .from("settlements")
+      .update({ splitwise_status: "unknown" })
+      .eq("id", settlementId);
+    if (error) fail("pushSettlement/markUnknown", error);
+    return { ok: false, status: "unknown" };
+  }
+
+  if (!data.ok || !data.expense_id) {
+    return { ok: false, error: data.error ?? "unknown_error" };
+  }
+
+  const { error } = await supabase
+    .from("settlements")
+    .update({
+      splitwise_expense_id: data.expense_id,
+      splitwise_payer_user_id: payer.id,
+      splitwise_pushed_at: new Date().toISOString(),
+      splitwise_status: null,
+    })
+    .eq("id", settlementId);
+  if (error) fail("pushSettlement/save", error);
+
+  for (const weekId of weekIds) {
+    await logAction({
+      actor,
+      action: "splitwise_push",
+      week_start: weekId,
+      detail: `${description} · ${money(totalCost)} · paid by ${cap(payer.name)}`,
+      device_id: deviceId,
+    });
+  }
+
+  return { ok: true, expenseId: data.expense_id };
+}
+
 // ── realtime ──
 /** Fire `onChange` whenever any of the watched tables changes. Returns cleanup. */
 export function subscribeChanges(onChange: () => void): () => void {
@@ -447,6 +572,7 @@ export function subscribeChanges(onChange: () => void): () => void {
     .on("postgres_changes", { event: "*", schema: "public", table: "logs" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "entry_shares" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "users" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "settlements" }, onChange)
     .subscribe();
   return () => {
     supabase.removeChannel(channel);

@@ -454,6 +454,14 @@ describe("sortPeople", () => {
     sortPeople(users);
     expect(users[0].name).toBe("parth");
   });
+
+  // The seed inserts everyone in one statement, so every seeded person shares
+  // a created_at. This is the normal case for the first seven people, not an
+  // edge case, and without a tiebreak their order would be unspecified.
+  it("falls back to name when timestamps tie, as the seeded people do", () => {
+    const users = [user("samir"), user("abhishek"), user("deven")];
+    expect(sortPeople(users).map((u) => u.name)).toEqual(["abhishek", "deven", "samir"]);
+  });
 });
 
 describe("splitMembers", () => {
@@ -516,9 +524,20 @@ export function canDelete(hasShares: boolean): boolean {
   return !hasShares;
 }
 
-/** People in stable display order: oldest first, so additions append. */
+/**
+ * People in stable display order: oldest first, so additions append.
+ *
+ * Name breaks ties, and ties are the normal case rather than an edge one: the
+ * seed inserts everyone in a single statement and Postgres `now()` is
+ * transaction-stable, so every seeded person shares one `created_at`. A
+ * comparator that never returns 0 would leave their row order resting on
+ * unspecified sort behaviour, and rows that reshuffle between loads are how
+ * you type a count into the wrong person's box.
+ */
 export function sortPeople(users: User[]): User[] {
-  return [...users].sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+  return [...users].sort(
+    (a, b) => a.created_at.localeCompare(b.created_at) || a.name.localeCompare(b.name),
+  );
 }
 
 /**
@@ -535,7 +554,7 @@ export function splitMembers(users: User[]): User[] {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run src/lib/people.test.ts`
-Expected: PASS, 11 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 5: Format, lint, typecheck, then commit**
 
@@ -765,7 +784,7 @@ Expected: PASS, 12 tests.
 - [ ] **Step 5: Run the whole suite**
 
 Run: `npm run test`
-Expected: PASS, 40 tests across three files.
+Expected: PASS, 41 tests across three files.
 
 - [ ] **Step 6: Format, lint, typecheck, then commit**
 
@@ -1459,7 +1478,7 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
 
   // Numbers from the most recent add anywhere, for the "Same as last" fill.
   const lastAdd = useMemo(() => {
-    const latest = [...entries].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
+    const latest = [...entries].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
     if (!latest || latest.entry_shares.length === 0) return null;
     const out: Alloc = {};
     for (const s of latest.entry_shares) out[s.user_id] = s.qty;
@@ -1679,7 +1698,7 @@ Append to `src/styles.css`:
 - [ ] **Step 8: Verify**
 
 Run: `npm run format && npm run lint && npm run typecheck && npm run test && npm run build`
-Expected: all clean, 40 tests passing.
+Expected: all clean, 41 tests passing.
 
 Then `npm run dev` and check: the composer lists the seven seeded people; typing
 a total shows "N left to allocate"; **Add** stays disabled until it reads

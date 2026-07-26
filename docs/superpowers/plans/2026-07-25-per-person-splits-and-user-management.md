@@ -751,7 +751,10 @@ export function groupByDay(entries: Entry[]): DayGroup[] {
   return [...byDay.entries()]
     .map(([day, adds]) => ({
       day,
-      adds,
+      // Oldest run first. Nothing in the queries orders adds, and an UPDATE
+      // moves a row's heap position, so without this the morning and evening
+      // runs can swap places after an edit.
+      adds: [...adds].sort((a, b) => a.created_at.localeCompare(b.created_at)),
       qty: adds.reduce((sum, a) => sum + a.qty, 0),
       amount: round2(adds.reduce((sum, a) => sum + a.amount, 0)),
     }))
@@ -2161,7 +2164,7 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
                   <button
                     className="add-line-main"
                     onClick={() => setOpenAdd(open ? null : e.id)}
-                    aria-expanded={open}
+                    aria-expanded={!broken && open}
                   >
                     <span className="add-line-qty">
                       {e.qty} @ {money(e.rate)}
@@ -2279,8 +2282,22 @@ renders:
 `onDiscard` is a no-op there: a paid week's adds are locked, so the repair
 actions are unreachable until the week is reopened.
 
-In `src/App.tsx`, pass `users={users}` to both `<WeekCard>` and `<PaidHistory>`,
-and give the ledger's `<WeekCard>` `onDiscard={handleDeleteEntry}`.
+In `src/App.tsx`, pass `users={users}` to both `<WeekCard>` and `<PaidHistory>`.
+Discarding is the least reversible action in the app, so route it through the
+same confirmation every other destructive or state-changing action uses, rather
+than firing on a single tap:
+
+```tsx
+                        onDiscard={(entry) =>
+                          setConfirm({
+                            title: "Discard this add?",
+                            body: "It was never fully split. Discarding removes it, and its money, from the week. This cannot be undone.",
+                            cta: "Discard",
+                            tone: "plain",
+                            onYes: () => handleDeleteEntry(entry),
+                          })
+                        }
+```
 
 - [ ] **Step 3: Count chapatis from adds, not day rows**
 
@@ -2337,7 +2354,10 @@ Append to `src/styles.css`:
 .add-line.broken {
   background: var(--brick-tint);
   border-radius: 8px;
-  padding: 4px 8px;
+  /* Keep the pencil's gutter. A bare `padding: 4px 8px` shorthand resets
+     .add-line's padding-right and drops the absolutely-positioned 44px edit
+     button on top of the expand button, right over the amount. */
+  padding: 4px 40px 4px 8px;
 }
 .repair {
   font-size: 12.5px;

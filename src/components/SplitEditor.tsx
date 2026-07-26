@@ -13,6 +13,9 @@ interface Props {
   /** Chapatis eaten by guests. Counts toward the total; nobody claims it. */
   otherQty: number;
   onOtherChange: (qty: number) => void;
+  /** Who covers the guests. Everyone by default; narrow it by tapping. */
+  otherSharers: string[];
+  onSharersChange: (ids: string[]) => void;
   /** Numbers from the previous add, for the "Same as last" fill. Null hides it. */
   lastAdd: Alloc | null;
   disabled?: boolean;
@@ -30,6 +33,8 @@ export function SplitEditor({
   onChange,
   otherQty,
   onOtherChange,
+  otherSharers,
+  onSharersChange,
   lastAdd,
   disabled,
 }: Props) {
@@ -126,6 +131,38 @@ export function SplitEditor({
             />
           </li>
         </ul>
+      )}
+
+      {otherQty > 0 && members.length > 0 && (
+        <div className="split-sharers">
+          <div className="split-sharers-t">
+            {otherSharers.length === members.length
+              ? "Covered by everyone"
+              : otherSharers.length === 0
+                ? "Nobody is covering these yet"
+                : `Covered by ${otherSharers.length} of ${members.length}`}
+          </div>
+          <div className="split-chips">
+            {members.map((m) => {
+              const on = otherSharers.includes(m.id);
+              return (
+                <button
+                  key={m.id}
+                  className={"chip" + (on ? " on" : "")}
+                  disabled={disabled}
+                  aria-pressed={on}
+                  onClick={() =>
+                    onSharersChange(
+                      on ? otherSharers.filter((id) => id !== m.id) : [...otherSharers, m.id],
+                    )
+                  }
+                >
+                  {cap(m.name)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <div className={"split-left" + (left === 0 ? " ok" : left < 0 ? " over" : "")}>

@@ -4,7 +4,7 @@ import type { Alloc, ShareInput } from "../lib/split";
 import { buildShares, remaining } from "../lib/split";
 import { splitMembers } from "../lib/people";
 import { DEFAULT_PRICE } from "../config";
-import { dayLabel, money, parseQty, sanitizeQty } from "../lib/util";
+import { dayLabel, money, parseQty, round2, sanitizeQty } from "../lib/util";
 import { IcTrash, IcX } from "./icons";
 import { SplitEditor } from "./SplitEditor";
 
@@ -32,6 +32,16 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
     return out;
   });
   const [otherQty, setOtherQty] = useState(entry.other_qty ?? 0);
+  // Who covered the guests is recoverable from the rows: a sharer's money is
+  // more than their own chapatis cost. No column needed. Falls back to
+  // everyone when this add had no guests to attribute.
+  const [sharerPick, setSharerPick] = useState<string[] | null>(() => {
+    if (!entry.other_qty) return null;
+    const covered = entry.entry_shares
+      .filter((sh) => sh.amount - round2(sh.qty * entry.rate) > 0.005)
+      .map((sh) => sh.user_id);
+    return covered.length > 0 ? covered : null;
+  });
 
   // Anyone already in this add stays editable even if their split switch has
   // since been turned off — history is never rewritten by a status change.
@@ -61,7 +71,15 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
 
   const parsed = parseQty(qtyRaw);
   const total = parsed?.qty ?? 0;
-  const valid = total > 0 && remaining(total, eligible, otherQty) === 0;
+  const sharers = useMemo(() => {
+    const ids = members.map((m) => m.id);
+    return sharerPick === null ? ids : sharerPick.filter((id) => ids.includes(id));
+  }, [sharerPick, members]);
+
+  const valid =
+    total > 0 &&
+    remaining(total, eligible, otherQty) === 0 &&
+    (otherQty === 0 || sharers.length > 0);
 
   return (
     <div className="ovl" onClick={onClose}>
@@ -93,6 +111,8 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
           onChange={setRows}
           otherQty={otherQty}
           onOtherChange={setOtherQty}
+          otherSharers={sharers}
+          onSharersChange={setSharerPick}
           lastAdd={null}
           disabled={busy}
         />
@@ -122,7 +142,7 @@ export function EditSheet({ entry, users, busy, onClose, onSave, onDelete }: Pro
                   rate: parsed.price,
                   otherQty,
                   note,
-                  shares: buildShares(eligible, parsed.price, otherQty),
+                  shares: buildShares(eligible, parsed.price, otherQty, sharers),
                 })
               }
             >

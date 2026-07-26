@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Entry, LogRow, Week, WeekView } from "../types";
+import type { Entry, LogRow, User, Week, WeekView } from "../types";
 import * as db from "../lib/db";
 import { ensureAuth } from "../lib/supabase";
 import { round2 } from "../lib/util";
@@ -7,6 +7,7 @@ import { round2 } from "../lib/util";
 export function useKhataData(onBooted: () => void | Promise<void>) {
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [paidEntries, setPaidEntries] = useState<Entry[]>([]);
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [hasMoreLogs, setHasMoreLogs] = useState(true);
@@ -28,6 +29,7 @@ export function useKhataData(onBooted: () => void | Promise<void>) {
       const data = await db.loadActive();
       setWeeks(data.weeks);
       setEntries(data.entries);
+      setUsers(data.users);
       setLogs(data.logs);
       setHasMoreLogs(data.logs.length >= db.LOG_PAGE);
       setOffline(false);
@@ -163,6 +165,7 @@ export function useKhataData(onBooted: () => void | Promise<void>) {
   return {
     weeks,
     entries,
+    users,
     allEntries,
     logs,
     loading,

@@ -1,32 +1,73 @@
-import { useMemo, useState } from "react";
-import type { Entry, Week } from "../types";
-import type { ParsedQty } from "../lib/util";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Entry, User, Week } from "../types";
+import type { Alloc, ShareInput } from "../lib/split";
+import { buildShares, remaining } from "../lib/split";
+import { splitMembers } from "../lib/people";
 import { DEFAULT_PRICE } from "../config";
 import { dayLabel, money, parseQty, sanitizeQty, todayStr, weekIdOf } from "../lib/util";
 import { IcPlus } from "./icons";
+import { SplitEditor } from "./SplitEditor";
 
 interface Props {
   entries: Entry[];
   weeks: Week[];
+  users: User[];
   busy: boolean;
-  onAdd: (parsed: ParsedQty, note: string, date: string) => Promise<boolean>;
+  onAdd: (
+    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+    date: string,
+  ) => Promise<boolean>;
 }
 
-export function AddForm({ entries, weeks, busy, onAdd }: Props) {
+export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
   const [qtyRaw, setQtyRaw] = useState("");
   const [noteRaw, setNoteRaw] = useState("");
   const [addErr, setAddErr] = useState("");
+  const [rows, setRows] = useState<Alloc>({});
   const today = todayStr();
   const [selectedDate, setSelectedDate] = useState(today);
 
   const isToday = selectedDate === today;
-  const { weekPaid, existingEntry } = useMemo(() => {
+  const members = useMemo(() => splitMembers(users), [users]);
+  const parsed = useMemo(() => parseQty(qtyRaw), [qtyRaw]);
+  const total = parsed?.qty ?? 0;
+
+  const { weekPaid, dayAdds } = useMemo(() => {
     const wid = weekIdOf(selectedDate);
     return {
       weekPaid: weeks.find((w) => w.week_start === wid)?.paid ?? false,
-      existingEntry: entries.find((e) => e.day === selectedDate) ?? null,
+      dayAdds: entries.filter((e) => e.day === selectedDate),
     };
   }, [selectedDate, weeks, entries]);
+
+  // Numbers from the most recent add anywhere, for the "Same as last" fill.
+  const lastAdd = useMemo(() => {
+    const latest = [...entries].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+    if (!latest || latest.entry_shares.length === 0) return null;
+    const out: Alloc = {};
+    for (const s of latest.entry_shares) out[s.user_id] = s.qty;
+    return out;
+  }, [entries]);
+
+  // Prefill only on a day's first add. A same-day top-up starts blank: the
+  // morning's 45-across-seven is the wrong shape for an evening 20-across-two.
+  //
+  // The ref primes at most once per date. Without it, the realtime refresh that
+  // follows every change anywhere would wipe an allocation as you were typing
+  // it — and on first paint there is no data to prime from yet.
+  const primedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (primedFor.current === selectedDate) return;
+    if (users.length === 0) return; // nothing loaded yet
+    primedFor.current = selectedDate;
+    // This is the one-time-per-date prime described above, guarded by the ref
+    // so it fires at most once per `selectedDate` rather than on every render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional
+    setRows(dayAdds.length === 0 && lastAdd ? { ...lastAdd } : {});
+  }, [selectedDate, users.length, dayAdds.length, lastAdd]);
+
+  const left = remaining(total, rows);
+  const canAdd = total > 0 && left === 0 && !busy;
 
   async function handleAdd() {
     setAddErr("");
@@ -34,16 +75,21 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
       setAddErr("This week is marked paid. Reopen it to add more.");
       return;
     }
-    const parsed = parseQty(qtyRaw);
     if (!parsed) {
       setAddErr("Enter a number like 5");
       return;
     }
+    const shares = buildShares(rows, parsed.price);
+    if (shares.length === 0) {
+      setAddErr("Give at least one person some chapatis");
+      return;
+    }
     const note = noteRaw.trim().slice(0, 60);
-    const ok = await onAdd(parsed, note, selectedDate);
+    const ok = await onAdd({ qty: parsed.qty, rate: parsed.price, note, shares }, selectedDate);
     if (ok) {
       setQtyRaw("");
       setNoteRaw("");
+      setRows({});
     }
   }
 
@@ -76,14 +122,11 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
             setQtyRaw(sanitizeQty(e.target.value));
             setAddErr("");
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleAdd();
-          }}
           aria-label="Chapati count"
         />
         <button
           className="btn btn-solid add-btn"
-          disabled={busy}
+          disabled={!canAdd}
           onClick={handleAdd}
           aria-label="Add entry"
         >
@@ -91,27 +134,34 @@ export function AddForm({ entries, weeks, busy, onAdd }: Props) {
           <span>Add</span>
         </button>
       </div>
+
+      <SplitEditor
+        members={members}
+        total={total}
+        rows={rows}
+        onChange={setRows}
+        lastAdd={lastAdd}
+        disabled={busy}
+      />
+
       <input
         className="in note"
         placeholder="Note (optional)"
         value={noteRaw}
         maxLength={60}
         onChange={(e) => setNoteRaw(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") handleAdd();
-        }}
         aria-label="Optional note"
       />
       {addErr && <div className="add-err">{addErr}</div>}
       {!addErr &&
-        (existingEntry ? (
+        (dayAdds.length > 0 ? (
           <div className="add-hint">
-            {isToday ? "Today" : dayLabel(selectedDate)} so far &middot; <b>{existingEntry.qty}</b>{" "}
-            chapati
-            {existingEntry.qty !== 1 ? "s" : ""} &middot; {money(existingEntry.amount)}
+            {isToday ? "Today" : dayLabel(selectedDate)} so far &middot;{" "}
+            <b>{dayAdds.reduce((s, e) => s + e.qty, 0)}</b> chapatis &middot;{" "}
+            {money(dayAdds.reduce((s, e) => s + e.amount, 0))}
           </div>
         ) : (
-          <div className="add-rate">{money(DEFAULT_PRICE)} per chapati</div>
+          <div className="add-rate">{money(parsed?.price ?? DEFAULT_PRICE)} per chapati</div>
         ))}
     </section>
   );

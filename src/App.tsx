@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import type { Entry } from "./types";
-import type { ParsedQty } from "./lib/util";
+import type { ShareInput } from "./lib/split";
 import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
 import { cap, dayLabel, money, todayStr, weekIdOf } from "./lib/util";
@@ -31,6 +31,7 @@ export default function App() {
   const {
     weeks,
     entries,
+    users,
     allEntries,
     logs,
     loading,
@@ -84,26 +85,16 @@ export default function App() {
     [load, markOffline],
   );
 
-  async function handleAdd(parsed: ParsedQty, note: string, date: string): Promise<boolean> {
+  async function handleAdd(
+    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+    date: string,
+  ): Promise<boolean> {
     if (!user) return false;
     const weekId = weekIdOf(date);
-    const existing = entries.find((e) => e.day === date) ?? null;
-    const wasThere = !!existing;
     const isToday = date === todayStr();
     return withBusy(async () => {
-      await db.addToday(
-        weekId,
-        date,
-        { qty: parsed.qty, price: parsed.price, note },
-        existing,
-        user,
-        device,
-      );
-      flash(
-        wasThere
-          ? `Added to ${isToday ? "today" : dayLabel(date)}`
-          : `${isToday ? "Today" : dayLabel(date)} logged`,
-      );
+      await db.addEntry(weekId, date, input, user, device);
+      flash(`${isToday ? "Today" : dayLabel(date)} logged`);
     });
   }
 
@@ -240,7 +231,7 @@ export default function App() {
               }
             />
 
-            <AddForm entries={entries} weeks={weeks} busy={busy} onAdd={handleAdd} />
+            <AddForm entries={entries} weeks={weeks} users={users} busy={busy} onAdd={handleAdd} />
 
             {shown.length === 0 ? (
               <div className="empty">

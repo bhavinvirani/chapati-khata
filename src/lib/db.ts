@@ -1,16 +1,12 @@
 import { supabase } from "./supabase";
-import { round2, money } from "./util";
+import { round2 } from "./util";
 import { DEFAULT_PRICE } from "../config";
+import { sharesAmount } from "./split";
+import type { ShareInput } from "./split";
 import type { Entry, LogAction, LogRow, User, Week } from "../types";
 
 // This module owns every read/write. The rest of the app never talks to
 // Supabase directly — swap this one file to change backends.
-
-interface AddInput {
-  qty: number;
-  price: number;
-  note: string;
-}
 
 function fail(context: string, error: unknown): never {
   console.error(`[db] ${context}`, error);
@@ -26,6 +22,7 @@ async function logAction(row: {
   qty_after?: number | null;
   note_before?: string | null;
   note_after?: string | null;
+  target?: string | null;
   device_id?: string | null;
 }): Promise<void> {
   const { error } = await supabase.from("logs").insert({
@@ -37,6 +34,7 @@ async function logAction(row: {
     qty_after: row.qty_after ?? null,
     note_before: row.note_before ?? null,
     note_after: row.note_after ?? null,
+    target: row.target ?? null,
     device_id: row.device_id ?? null,
   });
   if (error) fail("logAction", error);
@@ -45,12 +43,22 @@ async function logAction(row: {
 // ── reads ──
 export const LOG_PAGE = 20;
 
-/** Fetch all weeks (tiny), only unpaid entries, and first page of logs. */
-export async function loadActive(): Promise<{ weeks: Week[]; entries: Entry[]; logs: LogRow[] }> {
-  // Weeks + logs can run in parallel (independent queries).
-  const [w, l] = await Promise.all([
+// Shares travel with their entry — one round trip, and `needsRepair` can spot
+// an entry that lost them without a second query.
+const SELECT_ENTRY = "*, entry_shares(*)";
+
+/** Fetch all weeks and users (both tiny), unpaid entries, first page of logs. */
+export async function loadActive(): Promise<{
+  weeks: Week[];
+  entries: Entry[];
+  users: User[];
+  logs: LogRow[];
+}> {
+  // Independent queries — run them together.
+  const [w, l, users] = await Promise.all([
     supabase.from("weeks").select("*"),
     supabase.from("logs").select("*").order("ts", { ascending: false }).limit(LOG_PAGE),
+    loadUsers(),
   ]);
   if (w.error) fail("load weeks", w.error);
   if (l.error) fail("load logs", l.error);
@@ -60,18 +68,21 @@ export async function loadActive(): Promise<{ weeks: Week[]; entries: Entry[]; l
   const unpaidIds = weeks.filter((wk) => !wk.paid).map((wk) => wk.week_start);
   let entries: Entry[] = [];
   if (unpaidIds.length > 0) {
-    const e = await supabase.from("entries").select("*").in("week_start", unpaidIds);
+    const e = await supabase.from("entries").select(SELECT_ENTRY).in("week_start", unpaidIds);
     if (e.error) fail("load entries", e.error);
     entries = (e.data ?? []) as Entry[];
   }
 
-  return { weeks, entries, logs: (l.data ?? []) as LogRow[] };
+  return { weeks, entries, users, logs: (l.data ?? []) as LogRow[] };
 }
 
 /** Fetch entries for paid weeks (called on demand when history is expanded). */
 export async function loadPaidEntries(paidWeekIds: string[]): Promise<Entry[]> {
   if (paidWeekIds.length === 0) return [];
-  const { data, error } = await supabase.from("entries").select("*").in("week_start", paidWeekIds);
+  const { data, error } = await supabase
+    .from("entries")
+    .select(SELECT_ENTRY)
+    .in("week_start", paidWeekIds);
   if (error) fail("loadPaidEntries", error);
   return (data ?? []) as Entry[];
 }
@@ -135,58 +146,63 @@ async function ensureWeek(weekId: string): Promise<void> {
   if (error) fail("ensureWeek", error);
 }
 
-/** Log today's order. If the day already has an entry, ADD to it. */
-export async function addToday(
+export interface EntryInput {
+  qty: number;
+  rate: number;
+  note: string;
+  shares: ShareInput[];
+}
+
+/**
+ * Record one add: a purchase run with its own rate and its own full allocation.
+ *
+ * Not transactional \u2014 supabase-js has no client-side transactions. Shares go in
+ * as a single batch statement, so Postgres commits all of them or none, which
+ * leaves exactly one reachable bad state: an entry with no shares. If that
+ * happens we try to undo the entry; if the undo also fails, `needsRepair` in
+ * aggregate.ts catches the orphan and the UI offers to finish or discard it.
+ */
+export async function addEntry(
   weekId: string,
   day: string,
-  add: AddInput,
-  existing: Entry | null,
+  input: EntryInput,
   actor: string,
   deviceId: string,
 ): Promise<void> {
   await ensureWeek(weekId);
-  const delta = round2(add.qty * add.price);
 
-  // Auto-enrich note with qty + rate when a non-default price is used
-  const isCustomRate = add.price > 0 && add.qty > 0 && round2(add.price) !== DEFAULT_PRICE;
-  const rateTag = isCustomRate ? `${add.qty} \u00d7 ${money(add.price)}/ea` : "";
-  const enrichedNote = [add.note, rateTag].filter(Boolean).join(" \u00b7 ").trim();
-
-  if (existing) {
-    const qty = existing.qty + add.qty;
-    const amount = round2(existing.amount + delta);
-    const note = [existing.note, enrichedNote].filter(Boolean).join("; ").trim();
-    const { error } = await supabase
-      .from("entries")
-      .update({ qty, amount, note })
-      .eq("id", existing.id);
-    if (error) fail("addToday/update", error);
-    const noteChanged = existing.note !== note;
-    await logAction({
-      actor,
-      action: "add",
+  const { data, error } = await supabase
+    .from("entries")
+    .insert({
       week_start: weekId,
       day,
-      qty_before: existing.qty,
-      qty_after: qty,
-      note_before: noteChanged ? existing.note : null,
-      note_after: noteChanged ? note : null,
-      device_id: deviceId,
-    });
-  } else {
-    const { error } = await supabase
-      .from("entries")
-      .insert({ week_start: weekId, day, qty: add.qty, amount: delta, note: enrichedNote });
-    if (error) fail("addToday/insert", error);
-    await logAction({
-      actor,
-      action: "create",
-      week_start: weekId,
-      day,
-      qty_after: add.qty,
-      device_id: deviceId,
-    });
+      qty: input.qty,
+      rate: input.rate,
+      amount: sharesAmount(input.shares),
+      note: input.note,
+    })
+    .select("id")
+    .single();
+  if (error) fail("addEntry/insert", error);
+
+  const entryId = (data as { id: string }).id;
+  const { error: shareErr } = await supabase
+    .from("entry_shares")
+    .insert(input.shares.map((s) => ({ ...s, entry_id: entryId })));
+  if (shareErr) {
+    // Best effort: undo the entry rather than leave it unallocated.
+    await supabase.from("entries").delete().eq("id", entryId);
+    fail("addEntry/shares", shareErr);
   }
+
+  await logAction({
+    actor,
+    action: "create",
+    week_start: weekId,
+    day,
+    qty_after: input.qty,
+    device_id: deviceId,
+  });
 }
 
 /** Set an exact quantity, preserving the day's effective (blended) price. */
@@ -258,13 +274,15 @@ export async function settleAll(weekIds: string[], actor: string, deviceId: stri
 }
 
 // ── realtime ──
-/** Fire `onChange` whenever any of the three tables changes. Returns cleanup. */
+/** Fire `onChange` whenever any of the watched tables changes. Returns cleanup. */
 export function subscribeChanges(onChange: () => void): () => void {
   const channel = supabase
     .channel("khata-changes")
     .on("postgres_changes", { event: "*", schema: "public", table: "weeks" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "entries" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "logs" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "entry_shares" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "users" }, onChange)
     .subscribe();
   return () => {
     supabase.removeChannel(channel);

@@ -3,7 +3,7 @@ import type { Entry } from "./types";
 import type { ShareInput } from "./lib/split";
 import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
-import { cap, dayLabel, money, todayStr, weekIdOf } from "./lib/util";
+import { cap, dayLabel, money, normalizeName, todayStr, weekIdOf } from "./lib/util";
 import { useAuth } from "./hooks/useAuth";
 import { useKhataData } from "./hooks/useKhataData";
 import { useToast } from "./hooks/useToast";
@@ -175,7 +175,7 @@ export default function App() {
       name: string,
       code: string,
     ): Promise<"name" | "code" | "network" | null> => {
-      const clean = name.trim().toLowerCase();
+      const clean = normalizeName(name);
       if (ENTRY_CODE) {
         // Local dev: code from .env, name from the users table
         if (code !== ENTRY_CODE) return "code";

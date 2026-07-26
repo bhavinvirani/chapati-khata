@@ -2,6 +2,17 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { createClient } from "@supabase/supabase-js";
 
+// Mirrors src/lib/util.ts's normalizeName — Deno can't import from src/lib, so
+// this is a hand-kept duplicate. Format characters (\p{Cf}: zero-width space,
+// soft hyphen, etc.) survive trim() but not this, because names are stored
+// through the same normaliser. Keep the two in step by hand.
+function normalizeName(s: string): string {
+  return s
+    .replace(/\p{Cf}/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
 export default {
   fetch: withSupabase({ auth: ["publishable"] }, async (req) => {
     if (req.method !== "POST") {
@@ -16,7 +27,7 @@ export default {
       return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
     }
 
-    const clean = (typeof name === "string" ? name : "").trim().toLowerCase();
+    const clean = normalizeName(typeof name === "string" ? name : "");
     const codeStr = typeof code === "string" ? code : "";
 
     // ── validate entry code ──

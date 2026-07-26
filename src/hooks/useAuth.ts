@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import * as db from "../lib/db";
+import { normalizeName } from "../lib/util";
 
 export function useAuth() {
   const [user, setUser] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export function useAuth() {
 
   /** Set the signed-in user. Call AFTER validation (Gate / edge function). */
   function signIn(name: string) {
-    const clean = name.trim().toLowerCase();
+    const clean = normalizeName(name);
     setUser(clean);
     try {
       localStorage.setItem("khata.name", clean);

@@ -169,7 +169,7 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
           />
           <button
             className="btn btn-solid"
-            disabled={locked || !newName.trim()}
+            disabled={locked || !normalizeName(newName)}
             onClick={handleAdd}
           >
             Add

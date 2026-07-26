@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import type { Entry, User, WeekView } from "../types";
+import type { User, WeekView } from "../types";
 import { WeekCard } from "./WeekCard";
 
 interface Props {
@@ -10,7 +10,6 @@ interface Props {
   users: User[];
   busy: boolean;
   onExpand: () => void;
-  onEntry: (entry: Entry) => void;
   onReopen: (weekId: string) => void;
 }
 
@@ -22,7 +21,6 @@ export function PaidHistory({
   users,
   busy,
   onExpand,
-  onEntry,
   onReopen,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -60,7 +58,7 @@ export function PaidHistory({
                     w={w}
                     users={users}
                     busy={busy}
-                    onEntry={onEntry}
+                    onEntry={() => {}}
                     onDiscard={() => {}}
                     onPay={() => {}}
                     onReopen={() => onReopen(w.week_start)}

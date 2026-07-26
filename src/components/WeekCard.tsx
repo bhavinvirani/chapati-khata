@@ -70,7 +70,7 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
                   <button
                     className="add-line-main"
                     onClick={() => setOpenAdd(open ? null : e.id)}
-                    aria-expanded={open}
+                    aria-expanded={!broken && open}
                   >
                     <span className="add-line-qty">
                       {e.qty} @ {money(e.rate)}

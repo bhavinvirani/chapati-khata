@@ -241,7 +241,7 @@ html, body, #root{ min-height:100%; }
 .add-line-main{ display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; background:none; padding:6px 0; min-height:36px; }
 .add-line-qty{ font-family:var(--mono); font-size:14px; color:var(--ink); flex:1; }
 .add-line-edit{ position:absolute; top:2px; right:0; }
-.add-line.broken{ background:var(--brick-tint); border-radius:8px; padding:4px 8px; }
+.add-line.broken{ background:var(--brick-tint); border-radius:8px; padding:4px 40px 4px 8px; }
 .repair{ font-size:12.5px; color:var(--brick); padding:4px 0 6px; }
 .repair-a{ display:flex; gap:14px; margin-top:4px; }
 .link.danger{ color:var(--brick); }

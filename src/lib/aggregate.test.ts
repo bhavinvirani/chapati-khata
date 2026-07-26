@@ -72,6 +72,16 @@ describe("groupByDay", () => {
     expect(wed.qty).toBe(65);
     expect(wed.amount).toBe(37.5);
   });
+
+  // Nothing in the queries orders adds, and an UPDATE moves a row's heap
+  // position, so a same-day pair must come back oldest-first regardless of
+  // the order they arrived in.
+  it("orders same-day adds oldest first, regardless of input order", () => {
+    const morning = entry({ id: "e1", day: "2026-07-22", created_at: "2026-07-22T09:00:00Z" });
+    const evening = entry({ id: "e2", day: "2026-07-22", created_at: "2026-07-22T18:00:00Z" });
+    const [wed] = groupByDay([evening, morning]);
+    expect(wed.adds.map((a) => a.id)).toEqual(["e1", "e2"]);
+  });
 });
 
 describe("needsRepair", () => {

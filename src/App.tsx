@@ -255,7 +255,15 @@ export default function App() {
                         users={users}
                         busy={busy}
                         onEntry={(entry) => setEditing(entry)}
-                        onDiscard={handleDeleteEntry}
+                        onDiscard={(entry) =>
+                          setConfirm({
+                            title: "Discard this add?",
+                            body: "It was never fully split. Discarding removes it, and its money, from the week. This cannot be undone.",
+                            cta: "Discard",
+                            tone: "plain",
+                            onYes: () => handleDeleteEntry(entry),
+                          })
+                        }
                         onPay={() =>
                           setConfirm({
                             title: "Mark this week paid?",
@@ -279,7 +287,6 @@ export default function App() {
                   users={users}
                   busy={busy}
                   onExpand={loadHistory}
-                  onEntry={(entry) => setEditing(entry)}
                   onReopen={(weekId) =>
                     setConfirm({
                       title: "Reopen this week?",

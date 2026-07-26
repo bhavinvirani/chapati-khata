@@ -48,7 +48,10 @@ export function groupByDay(entries: Entry[]): DayGroup[] {
   return [...byDay.entries()]
     .map(([day, adds]) => ({
       day,
-      adds,
+      // Oldest run first. Nothing in the queries orders adds, and an UPDATE
+      // moves a row's heap position, so without this the morning and evening
+      // runs can swap places after an edit.
+      adds: [...adds].sort((a, b) => a.created_at.localeCompare(b.created_at)),
       qty: adds.reduce((sum, a) => sum + a.qty, 0),
       amount: round2(adds.reduce((sum, a) => sum + a.amount, 0)),
     }))

@@ -290,29 +290,90 @@ export async function deleteEntry(
   });
 }
 
-export async function setPaid(
-  weekId: string,
-  paid: boolean,
+/**
+ * Pay one or more weeks in a single settlement — the pushable unit for the
+ * Splitwise integration (§4.5/§7.2 of the design). A single-week Mark Paid
+ * is `createSettlement([weekId], ...)`; Settle All passes every open week.
+ */
+export async function createSettlement(
+  weekIds: string[],
   actor: string,
   deviceId: string,
 ): Promise<void> {
-  await ensureWeek(weekId);
-  const { error } = await supabase
+  for (const weekId of weekIds) {
+    await ensureWeek(weekId);
+  }
+
+  const { data, error } = await supabase
+    .from("settlements")
+    .insert({ actor, device_id: deviceId })
+    .select("id, created_at")
+    .single();
+  if (error) fail("createSettlement/insert", error);
+  const { id: settlementId, created_at } = data as { id: string; created_at: string };
+
+  const { error: upErr } = await supabase
     .from("weeks")
-    .update({ paid, paid_at: paid ? new Date().toISOString() : null })
-    .eq("week_start", weekId);
-  if (error) fail("setPaid", error);
-  await logAction({
-    actor,
-    action: paid ? "paid" : "reopen",
-    week_start: weekId,
-    device_id: deviceId,
-  });
+    .update({ paid: true, paid_at: created_at, settlement_id: settlementId })
+    .in("week_start", weekIds);
+  if (upErr) fail("createSettlement/weeks", upErr);
+
+  for (const weekId of weekIds) {
+    await logAction({ actor, action: "paid", week_start: weekId, device_id: deviceId });
+  }
 }
 
-export async function settleAll(weekIds: string[], actor: string, deviceId: string): Promise<void> {
+/**
+ * Reopen a week. If it belongs to a settlement, every week in that
+ * settlement reopens together (§4.6) — a settlement is one payment event,
+ * not divisible per week. A week paid before this feature shipped has no
+ * settlement (`settlement_id` is null) and just reopens alone, exactly as
+ * it always did.
+ */
+export async function reopenWeek(week: Week, actor: string, deviceId: string): Promise<void> {
+  if (!week.settlement_id) {
+    const { error } = await supabase
+      .from("weeks")
+      .update({ paid: false, paid_at: null })
+      .eq("week_start", week.week_start);
+    if (error) fail("reopenWeek", error);
+    await logAction({ actor, action: "reopen", week_start: week.week_start, device_id: deviceId });
+    return;
+  }
+
+  const { data: settlementRow, error: settlementErr } = await supabase
+    .from("settlements")
+    .select("splitwise_expense_id")
+    .eq("id", week.settlement_id)
+    .single();
+  if (settlementErr) fail("reopenWeek/settlement", settlementErr);
+  const expenseId = (settlementRow as { splitwise_expense_id: string | null }).splitwise_expense_id;
+
+  if (expenseId) {
+    const result = await deleteSplitwiseExpense(expenseId);
+    if (!result.ok) {
+      throw new Error(`Could not remove it from Splitwise (${result.error}). Nothing was reopened.`);
+    }
+  }
+
+  const { data: weekRows, error: weeksErr } = await supabase
+    .from("weeks")
+    .select("week_start")
+    .eq("settlement_id", week.settlement_id);
+  if (weeksErr) fail("reopenWeek/lookup", weeksErr);
+  const weekIds = (weekRows as { week_start: string }[]).map((w) => w.week_start);
+
+  const { error: upErr } = await supabase
+    .from("weeks")
+    .update({ paid: false, paid_at: null, settlement_id: null })
+    .in("week_start", weekIds);
+  if (upErr) fail("reopenWeek/weeks", upErr);
+
   for (const weekId of weekIds) {
-    await setPaid(weekId, true, actor, deviceId);
+    if (expenseId) {
+      await logAction({ actor, action: "splitwise_unpush", week_start: weekId, device_id: deviceId });
+    }
+    await logAction({ actor, action: "reopen", week_start: weekId, device_id: deviceId });
   }
 }
 

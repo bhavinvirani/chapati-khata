@@ -545,6 +545,9 @@ import { withSupabase } from "@supabase/server";
 
 const API_BASE = "https://secure.splitwise.com/api/v3.0";
 
+// Mirrors src/lib/splitwise.ts's normalizeEmail — Deno can't import from
+// src/lib (same reason validate-access hand-duplicates normalizeName). Keep
+// the two in step by hand.
 function normalizeEmail(s: string): string {
   return s.trim().toLowerCase();
 }

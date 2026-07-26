@@ -36,6 +36,26 @@ create table if not exists public.users (
   created_at timestamptz not null default now()
 );
 
+-- ── settlements: one row per Mark Paid / Settle All click, whatever weeks
+-- it covers — the pushable unit for the Splitwise integration. ──
+create table if not exists public.settlements (
+  id                      uuid primary key default gen_random_uuid(),
+  created_at              timestamptz not null default now(),
+  actor                   text not null,
+  device_id               text,
+  splitwise_payer_user_id uuid references public.users(id) on delete restrict,
+  splitwise_expense_id    text,
+  splitwise_status        text check (splitwise_status in ('unknown')),
+  splitwise_pushed_at     timestamptz
+);
+
+alter table public.weeks
+  add column if not exists settlement_id uuid references public.settlements(id) on delete restrict;
+create index if not exists weeks_settlement_idx on public.weeks(settlement_id);
+
+alter table public.users add column if not exists splitwise_email   text;
+alter table public.users add column if not exists splitwise_user_id text;
+
 -- ── the per-person breakdown ──
 -- on delete restrict is the teeth behind "a person with history cannot be
 -- deleted"; on delete cascade means removing an add takes its shares with it.
@@ -80,18 +100,20 @@ drop policy if exists "authed all - entries"      on public.entries;
 drop policy if exists "authed all - logs"         on public.logs;
 drop policy if exists "authed all - users"        on public.users;
 drop policy if exists "authed all - entry_shares" on public.entry_shares;
+drop policy if exists "authed all - settlements" on public.settlements;
 
 create policy "authed all - weeks"        on public.weeks        for all to authenticated using (true) with check (true);
 create policy "authed all - entries"      on public.entries      for all to authenticated using (true) with check (true);
 create policy "authed all - logs"         on public.logs         for all to authenticated using (true) with check (true);
 create policy "authed all - users"        on public.users        for all to authenticated using (true) with check (true);
 create policy "authed all - entry_shares" on public.entry_shares for all to authenticated using (true) with check (true);
+create policy "authed all - settlements" on public.settlements for all to authenticated using (true) with check (true);
 
 -- RLS policies only take effect once the role also holds the table-level
 -- grant; without this, queries fail with "permission denied for table ...".
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.weeks, public.entries, public.logs,
-  public.users, public.entry_shares to authenticated;
+  public.users, public.entry_shares, public.settlements to authenticated;
 
 -- The gate's edge function reads this table with the service-role key, before
 -- any session exists for RLS to authorise against. This project revoked the
@@ -133,5 +155,11 @@ begin
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'entry_shares'
   ) then
     alter publication supabase_realtime add table public.entry_shares;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'settlements'
+  ) then
+    alter publication supabase_realtime add table public.settlements;
   end if;
 end $$;

@@ -143,17 +143,24 @@ export default function App() {
     setTab("ledger");
   }
 
-  // Uses `allEntries`, not `entries`: the latter holds unpaid weeks only, and a
-  // backup that silently dropped every paid week — plus its per-person shares
-  // — would not be a backup. History is lazily loaded, so make sure it is
-  // actually populated first, the same way the Stats button does.
+  // `entries` holds unpaid weeks only, and `allEntries` is captured from the
+  // render this closure was created in — so it cannot see what loadHistory
+  // just fetched. Use what loadHistory returns instead.
   async function exportJSON() {
-    if (!historyLoaded) await loadHistory();
+    let paid: Entry[];
+    try {
+      paid = await loadHistory();
+    } catch {
+      // A partial backup that looks complete is worse than no backup — bail
+      // out without writing anything.
+      flash("Could not back up. Check your connection.");
+      return;
+    }
     const payload = {
       exported_at: new Date().toISOString(),
       weeks,
       users,
-      entries: allEntries,
+      entries: [...entries, ...paid],
       logs,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -300,7 +307,13 @@ export default function App() {
                   paid={paid}
                   users={users}
                   busy={busy}
-                  onExpand={loadHistory}
+                  onExpand={() => {
+                    // Deliberately quiet: toggling the section open on a bad
+                    // connection should not throw at the user. `loadHistory`
+                    // now rethrows for callers that need to know (the
+                    // export), so this call site owns its own catch.
+                    loadHistory().catch(() => {});
+                  }}
                   onReopen={(weekId) =>
                     setConfirm({
                       title: "Reopen this week?",
@@ -319,7 +332,10 @@ export default function App() {
               <button
                 className="foot-link"
                 onClick={async () => {
-                  if (!historyLoaded) await loadHistory();
+                  // Same quiet-catch reasoning as the Paid history expander:
+                  // opening Stats should not throw at the user if the fetch
+                  // fails, just proceed with whatever is loaded.
+                  if (!historyLoaded) await loadHistory().catch(() => {});
                   setShowStats(true);
                 }}
               >

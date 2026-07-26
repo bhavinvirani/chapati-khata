@@ -43,6 +43,13 @@ async function splitwiseFetch(
     init.body = new URLSearchParams(params ?? {}).toString();
   }
   const res = await fetch(url, init);
+  // Splitwise itself warns that 200 OK doesn't mean success (bodies carry
+  // the real errors object regardless of status), so we intentionally don't
+  // gate on res.ok here — a non-2xx with a parseable JSON body still needs
+  // to reach the existing json.errors handling below, not get collapsed
+  // into a generic network failure. A non-JSON body (gateway timeout page,
+  // empty response, etc.) still throws via res.json() itself, which every
+  // call site already wraps in try/catch.
   return res.json();
 }
 
@@ -72,7 +79,17 @@ async function resolveCategoryId(apiKey: string, name: string): Promise<number |
 async function handleLink(apiKey: string, groupId: string, body: Record<string, unknown>) {
   const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
   if (!email) return Response.json({ linked: false });
-  const members = await groupMembers(apiKey, groupId);
+  let members: SplitwiseMember[];
+  try {
+    members = await groupMembers(apiKey, groupId);
+  } catch {
+    // Can't confirm membership without the group — fail closed the same way
+    // a genuine non-match does, rather than an unhandled exception. The
+    // caller only ever branches on `linked`, so this stays within the
+    // action's existing response contract instead of introducing a new
+    // shape it wasn't built to expect.
+    return Response.json({ linked: false });
+  }
   const match = members.find((m) => m.email === email);
   if (!match) return Response.json({ linked: false });
   return Response.json({ linked: true, splitwise_user_id: String(match.id) });
@@ -96,7 +113,12 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
     return Response.json({ ok: false, error: "amount_mismatch" });
   }
 
-  const members = await groupMembers(apiKey, groupId);
+  let members: SplitwiseMember[];
+  try {
+    members = await groupMembers(apiKey, groupId);
+  } catch {
+    return Response.json({ ok: false, error: "network" }, { status: 502 });
+  }
   const byEmail = new Map(members.map((m) => [m.email, m.id]));
 
   const missing: string[] = [];
@@ -106,18 +128,37 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
     return { ...p, splitwiseId: id };
   });
   const payerId = byEmail.get(normalizeEmail(payerEmail));
-  if (!payerId) missing.push("payer");
+  if (!payerId) missing.push(payerEmail);
   if (missing.length > 0) {
     return Response.json({ ok: false, error: "not_linked", detail: missing.join(", ") });
   }
 
-  const categoryId = await resolveCategoryId(apiKey, "Groceries");
+  // The payer may have fronted the cost for a week they personally ordered
+  // nothing (a real, design-intended case) — they then have no entry in
+  // people[] at all. Splitwise still needs a users__N__ entry for them so
+  // paid_share sums to the total; add a synthetic zero-owed one if they're
+  // not already present as one of the people with a share.
+  if (!resolved.some((p) => p.splitwiseId === payerId)) {
+    resolved.push({ name: "payer", email: payerEmail, qty: 0, amount: 0, splitwiseId: payerId });
+  }
+
+  // Mirrors src/config.ts's SPLITWISE_CATEGORY_NAME — Deno can't import from
+  // src/config (same hand-duplication reason as normalizeEmail above). Keep
+  // the two in step by hand.
+  let categoryId: number | null;
+  try {
+    categoryId = await resolveCategoryId(apiKey, "Groceries");
+  } catch {
+    return Response.json({ ok: false, error: "network" }, { status: 502 });
+  }
 
   const params: Record<string, string> = {
     cost: totalCost.toFixed(2),
     group_id: groupId,
     description,
     date,
+    // Mirrors src/config.ts's SPLITWISE_CURRENCY — same hand-duplication
+    // reason as normalizeEmail above. Keep the two in step by hand.
     currency_code: "CAD",
   };
   if (categoryId !== null) params.category_id = String(categoryId);

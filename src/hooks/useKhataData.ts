@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Entry, LogRow, Week, WeekView } from "../types";
+import type { Entry, LogRow, User, Week, WeekView } from "../types";
 import * as db from "../lib/db";
 import { ensureAuth } from "../lib/supabase";
 import { round2 } from "../lib/util";
 
-export function useKhataData(onBooted: () => void) {
+export function useKhataData(onBooted: () => void | Promise<void>) {
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [paidEntries, setPaidEntries] = useState<Entry[]>([]);
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [hasMoreLogs, setHasMoreLogs] = useState(true);
@@ -28,6 +29,7 @@ export function useKhataData(onBooted: () => void) {
       const data = await db.loadActive();
       setWeeks(data.weeks);
       setEntries(data.entries);
+      setUsers(data.users);
       setLogs(data.logs);
       setHasMoreLogs(data.logs.length >= db.LOG_PAGE);
       setOffline(false);
@@ -53,7 +55,7 @@ export function useKhataData(onBooted: () => void) {
     (async () => {
       try {
         await ensureAuth();
-        onBooted();
+        await onBooted();
         setReady(true);
         await load();
       } catch {
@@ -99,8 +101,15 @@ export function useKhataData(onBooted: () => void) {
   // ── lazy load paid entries ──
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  async function loadHistory() {
-    if (historyLoadedRef.current) return; // already loaded
+  // Returns the paid entries it loaded (or, once already loaded, the current
+  // `paidEntries` unchanged) so a caller that needs them right after the
+  // await — like a backup export — reads real data instead of a stale render
+  // closure. Rethrows on failure instead of swallowing: callers that need to
+  // know a load failed (a backup that must not go out partial) can now tell
+  // that apart from an empty history. Callers that don't — the Paid history
+  // expander — catch quietly at their own call site.
+  async function loadHistory(): Promise<Entry[]> {
+    if (historyLoadedRef.current) return paidEntries; // already loaded
     setLoadingHistory(true);
     try {
       const paidIds = weeks.filter((w) => w.paid).map((w) => w.week_start);
@@ -108,8 +117,7 @@ export function useKhataData(onBooted: () => void) {
       setPaidEntries(pe);
       historyLoadedRef.current = true;
       setHistoryLoaded(true);
-    } catch {
-      // silent — user can retry by toggling
+      return pe;
     } finally {
       setLoadingHistory(false);
     }
@@ -163,6 +171,7 @@ export function useKhataData(onBooted: () => void) {
   return {
     weeks,
     entries,
+    users,
     allEntries,
     logs,
     loading,

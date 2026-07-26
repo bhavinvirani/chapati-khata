@@ -6,8 +6,9 @@ what's owed until the week is marked paid. Data lives in your own Supabase
 (Postgres) database, so it's permanent and portable.
 
 - **Shared** - one live tab; every device sees the same numbers, updated in real time.
-- **Light gate** - type your name (from an allowlist) to enter. No passwords.
-- **Auditable** - every add, edit, delete, and payment is recorded in an append-only log.
+- **Light gate** - type your name (from the group's list, managed in-app) to enter. No passwords.
+- **Split by person** - each add is divided across whoever actually had some, so the tab tracks who owes what, not just a group total.
+- **Auditable** - every add, edit, delete, payment, and people change is recorded in an append-only log.
 - **Flexible dates** - add entries for today or any past date you missed.
 - **Custom pricing** - enter `50x0.75` for 50 chapatis at 0.75 each.
 - **Yours** - export the whole thing to JSON anytime; the database is your account.
@@ -65,19 +66,17 @@ npm install
 npm run dev
 ```
 
-Open the URL it prints (usually `http://localhost:5173`). Type one of the names
-from the allowlist to enter, add a few chapatis, and confirm it works. Open the
+Open the URL it prints (usually `http://localhost:5173`). Type one of your
+group's names to enter, add a few chapatis, and confirm it works. Open the
 same URL in a second browser/phone - changes should appear live in both.
 
 ---
 
 ## Step 3 - Set your group's names and price
 
-Names live in [`allowed-names.json`](allowed-names.json) at the repo root:
-
-```json
-["bhavin", "abhishek", "deven", "parth", "pratik", "hitanshi", "samir"]
-```
+Who can sign in lives in the `users` table, managed from the **People** sheet
+inside the app - no file to edit, no redeploy needed. Add or remove someone,
+or toggle their login access, and it takes effect right away.
 
 Price and currency live in [`src/config.ts`](src/config.ts):
 
@@ -86,14 +85,12 @@ export const DEFAULT_PRICE = 0.5; // per chapati
 export const CURRENCY = "$";
 ```
 
-Names are matched case-insensitively. To add or remove someone, just edit
-`allowed-names.json` and redeploy - CI keeps the production sign-in gate's
-allowlist in sync with this same file automatically.
+Names are matched case-insensitively.
 
 **Price tip:** the default price applies to every entry. If one day had a
 different rate, type it in the add box as `count x price`, e.g. `50x0.75`
-(fifty chapatis at 0.75 each). The day stores the money, so mixed prices add up
-correctly.
+(fifty chapatis at 0.75 each). A day may hold several adds, and each add
+stores its own rate, so mixed prices on the same day add up correctly.
 
 ---
 
@@ -170,14 +167,15 @@ Tap the download icon in the app header any time to save a full JSON snapshot
 
 - **Vite + React + TypeScript**, plain CSS (no UI framework).
 - **Supabase** (hosted Postgres) for shared, durable storage + realtime updates.
-- Three tables - `weeks`, `entries`, `logs` - with money stored per entry and all
+- Five tables - `weeks`, `entries`, `entry_shares`, `logs`, `users` - with
+  money stored per add, its per-person split in `entry_shares`, and all
   totals derived in the UI. See [`supabase/schema.sql`](supabase/schema.sql).
 - All database access is isolated in [`src/lib/db.ts`](src/lib/db.ts). Swap backends
   by rewriting one file.
 
 ```
 src/
-  config.ts              # names, price, currency
+  config.ts              # price, currency
   types.ts               # shared TypeScript types
   hooks/
     useAuth.ts           # sign-in / sign-out state

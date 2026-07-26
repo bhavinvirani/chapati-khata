@@ -1,5 +1,5 @@
 import { cap } from "../lib/util";
-import { IcDownload, IcRefresh, Roti } from "./icons";
+import { IcDownload, IcPeople, IcRefresh, Roti } from "./icons";
 
 interface Props {
   loading: boolean;
@@ -7,9 +7,17 @@ interface Props {
   onExport: () => void;
   onRefresh: () => void;
   onUserClick: () => void;
+  onPeopleClick: () => void;
 }
 
-export function Header({ loading, userName, onExport, onRefresh, onUserClick }: Props) {
+export function Header({
+  loading,
+  userName,
+  onExport,
+  onRefresh,
+  onUserClick,
+  onPeopleClick,
+}: Props) {
   return (
     <header className="hdr">
       <div className="brand">
@@ -19,6 +27,9 @@ export function Header({ loading, userName, onExport, onRefresh, onUserClick }: 
         </div>
       </div>
       <div className="hdr-r">
+        <button className="icon-btn" onClick={onPeopleClick} aria-label="People">
+          <IcPeople className="ic" />
+        </button>
         <button className="icon-btn" onClick={onExport} aria-label="Download backup">
           <IcDownload className="ic" />
         </button>

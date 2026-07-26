@@ -1,10 +1,9 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import type { Entry } from "./types";
-import type { ParsedQty } from "./lib/util";
+import type { ShareInput } from "./lib/split";
 import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
-import { cap, dayLabel, money, todayStr, weekIdOf } from "./lib/util";
-import { ALLOWED_NAMES } from "./config";
+import { cap, dayLabel, money, normalizeName, todayStr, weekIdOf } from "./lib/util";
 import { useAuth } from "./hooks/useAuth";
 import { useKhataData } from "./hooks/useKhataData";
 import { useToast } from "./hooks/useToast";
@@ -22,6 +21,7 @@ import { EditSheet } from "./components/EditSheet";
 import { LogView } from "./components/LogView";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { StatsSheet } from "./components/StatsSheet";
+import { PeopleSheet } from "./components/PeopleSheet";
 import { Toast } from "./components/Toast";
 import { Roti } from "./components/icons";
 
@@ -32,6 +32,7 @@ export default function App() {
   const {
     weeks,
     entries,
+    users,
     allEntries,
     logs,
     loading,
@@ -59,6 +60,7 @@ export default function App() {
   const [editing, setEditing] = useState<Entry | null>(null);
   const [busy, setBusy] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showPeople, setShowPeople] = useState(false);
   const busyRef = useRef(false);
 
   const device = useMemo(() => getDeviceId(), []);
@@ -85,33 +87,26 @@ export default function App() {
     [load, markOffline],
   );
 
-  async function handleAdd(parsed: ParsedQty, note: string, date: string): Promise<boolean> {
+  async function handleAdd(
+    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+    date: string,
+  ): Promise<boolean> {
     if (!user) return false;
     const weekId = weekIdOf(date);
-    const existing = entries.find((e) => e.day === date) ?? null;
-    const wasThere = !!existing;
     const isToday = date === todayStr();
     return withBusy(async () => {
-      await db.addToday(
-        weekId,
-        date,
-        { qty: parsed.qty, price: parsed.price, note },
-        existing,
-        user,
-        device,
-      );
-      flash(
-        wasThere
-          ? `Added to ${isToday ? "today" : dayLabel(date)}`
-          : `${isToday ? "Today" : dayLabel(date)} logged`,
-      );
+      await db.addEntry(weekId, date, input, user, device);
+      flash(`${isToday ? "Today" : dayLabel(date)} logged`);
     });
   }
 
-  async function handleSaveEdit(entry: Entry, qty: number, note: string) {
+  async function handleSaveEdit(
+    entry: Entry,
+    input: { qty: number; rate: number; note: string; shares: ShareInput[] },
+  ) {
     if (!user) return;
     await withBusy(async () => {
-      await db.editEntry(entry, qty, note.trim(), user, device);
+      await db.editEntry(entry, { ...input, note: input.note.trim() }, user, device);
       setEditing(null);
       flash("Entry updated");
     });
@@ -148,8 +143,26 @@ export default function App() {
     setTab("ledger");
   }
 
-  function exportJSON() {
-    const payload = { exported_at: new Date().toISOString(), weeks, entries, logs };
+  // `entries` holds unpaid weeks only, and `allEntries` is captured from the
+  // render this closure was created in — so it cannot see what loadHistory
+  // just fetched. Use what loadHistory returns instead.
+  async function exportJSON() {
+    let paid: Entry[];
+    try {
+      paid = await loadHistory();
+    } catch {
+      // A partial backup that looks complete is worse than no backup — bail
+      // out without writing anything.
+      flash("Could not back up. Check your connection.");
+      return;
+    }
+    const payload = {
+      exported_at: new Date().toISOString(),
+      weeks,
+      users,
+      entries: [...entries, ...paid],
+      logs,
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -169,11 +182,11 @@ export default function App() {
       name: string,
       code: string,
     ): Promise<"name" | "code" | "network" | null> => {
-      const clean = name.trim().toLowerCase();
+      const clean = normalizeName(name);
       if (ENTRY_CODE) {
-        // Local dev: validate from .env + config.ts
+        // Local dev: code from .env, name from the users table
         if (code !== ENTRY_CODE) return "code";
-        if (!ALLOWED_NAMES.includes(clean)) return "name";
+        if (!(await db.nameCanLogin(clean))) return "name";
       } else {
         // Production: validate via edge function
         try {
@@ -203,6 +216,7 @@ export default function App() {
           userName={user}
           onExport={exportJSON}
           onRefresh={load}
+          onPeopleClick={() => setShowPeople(true)}
           onUserClick={() =>
             setConfirm({
               title: "Signed in as " + cap(user),
@@ -241,7 +255,7 @@ export default function App() {
               }
             />
 
-            <AddForm entries={entries} weeks={weeks} busy={busy} onAdd={handleAdd} />
+            <AddForm entries={entries} weeks={weeks} users={users} busy={busy} onAdd={handleAdd} />
 
             {shown.length === 0 ? (
               <div className="empty">
@@ -259,8 +273,18 @@ export default function App() {
                       {prevYear && year !== prevYear && <div className="year-sep">{year}</div>}
                       <WeekCard
                         w={w}
+                        users={users}
                         busy={busy}
                         onEntry={(entry) => setEditing(entry)}
+                        onDiscard={(entry) =>
+                          setConfirm({
+                            title: "Discard this add?",
+                            body: "It was never fully split. Discarding removes it, and its money, from the week. This cannot be undone.",
+                            cta: "Discard",
+                            tone: "plain",
+                            onYes: () => handleDeleteEntry(entry),
+                          })
+                        }
                         onPay={() =>
                           setConfirm({
                             title: "Mark this week paid?",
@@ -281,9 +305,15 @@ export default function App() {
                   historyLoaded={historyLoaded}
                   loadingHistory={loadingHistory}
                   paid={paid}
+                  users={users}
                   busy={busy}
-                  onExpand={loadHistory}
-                  onEntry={(entry) => setEditing(entry)}
+                  onExpand={() => {
+                    // Deliberately quiet: toggling the section open on a bad
+                    // connection should not throw at the user. `loadHistory`
+                    // now rethrows for callers that need to know (the
+                    // export), so this call site owns its own catch.
+                    loadHistory().catch(() => {});
+                  }}
                   onReopen={(weekId) =>
                     setConfirm({
                       title: "Reopen this week?",
@@ -302,7 +332,10 @@ export default function App() {
               <button
                 className="foot-link"
                 onClick={async () => {
-                  if (!historyLoaded) await loadHistory();
+                  // Same quiet-catch reasoning as the Paid history expander:
+                  // opening Stats should not throw at the user if the fetch
+                  // fails, just proceed with whatever is loaded.
+                  if (!historyLoaded) await loadHistory().catch(() => {});
                   setShowStats(true);
                 }}
               >
@@ -323,6 +356,7 @@ export default function App() {
       {editing && (
         <EditSheet
           entry={editing}
+          users={users}
           busy={busy}
           onClose={() => setEditing(null)}
           onSave={handleSaveEdit}
@@ -332,7 +366,21 @@ export default function App() {
 
       {confirm && <ConfirmDialog confirm={confirm} busy={busy} onClose={clearConfirm} />}
 
-      {showStats && <StatsSheet entries={allEntries} onClose={() => setShowStats(false)} />}
+      {showStats && (
+        <StatsSheet entries={allEntries} users={users} onClose={() => setShowStats(false)} />
+      )}
+
+      {showPeople && user && (
+        <PeopleSheet
+          users={users}
+          actor={user}
+          busy={busy}
+          deviceId={device}
+          onClose={() => setShowPeople(false)}
+          onChanged={load}
+          onError={flash}
+        />
+      )}
 
       {toast && <Toast message={toast} />}
     </div>

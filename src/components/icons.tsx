@@ -56,6 +56,13 @@ export const IcDownload = (p: P) => (
     <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
   </Base>
 );
+export const IcPeople = (p: P) => (
+  <Base {...p}>
+    <path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1" />
+    <circle cx="9" cy="7" r="3.2" />
+    <path d="M22 19v-1a4 4 0 0 0-3-3.87M17 3.6a4 4 0 0 1 0 7.75" />
+  </Base>
+);
 
 /** Roti disc — the signature mark. */
 export function Roti({ size = 22 }: { size?: number }) {

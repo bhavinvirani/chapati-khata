@@ -1,18 +1,49 @@
 import { useCallback, useState } from "react";
-import { ALLOWED_NAMES } from "../config";
+import * as db from "../lib/db";
+import { normalizeName } from "../lib/util";
 
 export function useAuth() {
   const [user, setUser] = useState<string | null>(null);
 
-  /** Restore a previously saved name (checks allowlist for safety). */
-  const restoreUser = useCallback(() => {
+  /**
+   * Restore a previously saved name, re-checking it against the users table.
+   *
+   * This check is the only thing that makes revoking someone's access take
+   * effect. `khata.name` is read nowhere else and signing out is user-initiated,
+   * so without it a revoked person keeps full access on their existing device
+   * indefinitely — there is no "next sign-in" to catch them at.
+   *
+   * A definitive no clears the saved name. A thrown error does not: the app has
+   * to keep working offline, and an unreachable server is not a revocation.
+   */
+  const restoreUser = useCallback(async () => {
     const saved = localStorage.getItem("khata.name");
-    if (saved && ALLOWED_NAMES.includes(saved)) setUser(saved);
+    if (!saved) return;
+    let allowed: boolean;
+    try {
+      allowed = await db.nameCanLogin(saved);
+    } catch {
+      // Offline or server error — keep the session rather than lock them out.
+      setUser(saved);
+      return;
+    }
+    if (!allowed) {
+      // The cleanup is best-effort and kept in its own try/catch: a throw here
+      // is a localStorage quirk, not a network problem, and must not fall into
+      // the catch above and restore a session that was just refused.
+      try {
+        localStorage.removeItem("khata.name");
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    setUser(saved);
   }, []);
 
   /** Set the signed-in user. Call AFTER validation (Gate / edge function). */
   function signIn(name: string) {
-    const clean = name.trim().toLowerCase();
+    const clean = normalizeName(name);
     setUser(clean);
     try {
       localStorage.setItem("khata.name", clean);

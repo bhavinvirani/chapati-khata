@@ -38,13 +38,13 @@ Settlement with the roti provider stays exactly as it is today: one weekly
 
 The word "entry" changes meaning, so it is pinned down here.
 
-| Term      | Meaning                                                                                         |
-| --------- | ----------------------------------------------------------------------------------------------- |
-| **Add**   | One purchase run: a date, a total qty, one rate, one complete per-person allocation. The unit of entry, editing and deletion. Stored as a row in `entries`. |
-| **Day**   | A display grouping of that date's adds. No longer a stored row.                                  |
-| **Week**  | Monday-anchored. The settlement unit with the roti provider. Unchanged.                          |
-| **Share** | One person's qty and money within one add. Stored as a row in `entry_shares`.                    |
-| **Person**| A row in `users`, carrying two independent switches.                                             |
+| Term       | Meaning                                                                                                                                                     |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Add**    | One purchase run: a date, a total qty, one rate, one complete per-person allocation. The unit of entry, editing and deletion. Stored as a row in `entries`. |
+| **Day**    | A display grouping of that date's adds. No longer a stored row.                                                                                             |
+| **Week**   | Monday-anchored. The settlement unit with the roti provider. Unchanged.                                                                                     |
+| **Share**  | One person's qty and money within one add. Stored as a row in `entry_shares`.                                                                               |
+| **Person** | A row in `users`, carrying two independent switches.                                                                                                        |
 
 ## 4. Decisions
 
@@ -89,7 +89,7 @@ Every person carries **two independent switches**:
 - `can_login` — passes the gate
 
 All four combinations are meaningful. The one that motivated two switches over
-a three-state status is *in the split but no app access* — someone who eats roti
+a three-state status is _in the split but no app access_ — someone who eats roti
 but never installs the app.
 
 Any signed-in user can add people and flip either switch. There is no admin
@@ -209,14 +209,14 @@ The two foreign keys carry the design's guarantees:
 migration. The TypeScript `LogAction` union and `LogView`'s renderer both need
 extending:
 
-| action             | renders as                        |
-| ------------------ | --------------------------------- |
-| `user_add`         | added \<target\>                   |
-| `user_delete`      | deleted \<target\>                 |
-| `user_split_on`    | put \<target\> in the split        |
-| `user_split_off`   | took \<target\> out of the split   |
-| `user_login_on`    | gave \<target\> access             |
-| `user_login_off`   | revoked \<target\>'s access        |
+| action           | renders as                       |
+| ---------------- | -------------------------------- |
+| `user_add`       | added \<target\>                 |
+| `user_delete`    | deleted \<target\>               |
+| `user_split_on`  | put \<target\> in the split      |
+| `user_split_off` | took \<target\> out of the split |
+| `user_login_on`  | gave \<target\> access           |
+| `user_login_off` | revoked \<target\>'s access      |
 
 ### 5.5 Unchanged
 
@@ -262,7 +262,7 @@ file, at the cost of a reachable inconsistent state.
 4. insert the log row
 
 Step 3 being one statement means Postgres commits every share or none. The only
-reachable bad state is therefore *an entry with no shares at all*.
+reachable bad state is therefore _an entry with no shares at all_.
 
 If step 3 fails, the app immediately attempts to delete the entry created in
 step 2. If that cleanup also fails, the orphan survives and is handled by §7.3.
@@ -282,10 +282,24 @@ of attribution.
 ### 7.3 The repair state
 
 An add whose shares are missing, or whose share quantities do not sum to its
-`qty`, renders as **⚠ needs repair** with two actions:
+`qty`, or whose share amounts do not sum to its `amount`, renders as
+**⚠ needs repair** with two actions:
 
-- **Finish split** — opens the editor with the total locked
-- **Discard** — deletes the add
+- **Finish split** — opens the editor, with the total editable
+- **Discard** — deletes the add, behind a confirmation
+
+The total stays editable rather than locked: a broken add's own total may be the
+part that is wrong, so locking it would leave some broken adds unrepairable.
+
+Both checks matter. An earlier draft compared only quantities, which left a
+rate-only edit whose final write failed permanently undetected — the shares
+would carry new money while the entry carried old, and the per-person figures
+would silently stop agreeing with the week total.
+
+The actions are offered only while the week is unpaid. Repairing changes the
+add's `qty` and `amount`, so on a paid week it would move a total already handed
+to the roti provider; the warning still shows there, naming reopening as the way
+out.
 
 This check runs over already-loaded data; it needs no extra query. It is the
 same half-split state rejected as a feature in §4.1, present only as an error
@@ -355,8 +369,8 @@ sits above the button, and **Add** is disabled unless it reads zero.
 Rows group by day. Each day shows its date and combined total; beneath it, one
 sub-row per add showing `qty @ rate` and amount. An add's per-person split is
 **collapsed by default** and expands on tap — with eight people per add, showing
-every split inline would bury the week. Tapping the add row itself opens the
-editor.
+every split inline would bury the week. Editing is a separate control on the
+add row, so expanding to look and tapping to change are never confused.
 
 Each week card also shows a **per-person subtotal for that week**. This is the
 same data one aggregation up, needs no new screen, and is what makes manual
@@ -412,17 +426,17 @@ functions in `src/lib/`, requiring no database:
 
 Decided against, or deferred, with the reason recorded so it is not re-litigated:
 
-| Item | Why |
-| --- | --- |
-| Per-person settlement / partial payment | Contradicts week-level settlement; person-to-person lives in Splitwise |
-| Payer field | The same person fronts every payment |
-| Date-range per-person summary screen | Deferred; the Splitwise handoff stays manual for now. Consequence: a bi-weekly entry means reading two week cards and adding them by hand |
-| Copy-to-clipboard for Splitwise | Not wanted |
-| Per-person breakdown on the To pay card | Not wanted |
-| Unassigned / draft remainder | Explicitly rejected in favour of the hard gate |
-| Renaming a person | Not requested; delete-and-re-add covers the zero-share case |
-| Retroactive effects of removal | History is immutable by design |
-| Legacy backfill | No legacy data exists after the wipe |
+| Item                                    | Why                                                                                                                                       |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-person settlement / partial payment | Contradicts week-level settlement; person-to-person lives in Splitwise                                                                    |
+| Payer field                             | The same person fronts every payment                                                                                                      |
+| Date-range per-person summary screen    | Deferred; the Splitwise handoff stays manual for now. Consequence: a bi-weekly entry means reading two week cards and adding them by hand |
+| Copy-to-clipboard for Splitwise         | Not wanted                                                                                                                                |
+| Per-person breakdown on the To pay card | Not wanted                                                                                                                                |
+| Unassigned / draft remainder            | Explicitly rejected in favour of the hard gate                                                                                            |
+| Renaming a person                       | Not requested; delete-and-re-add covers the zero-share case                                                                               |
+| Retroactive effects of removal          | History is immutable by design                                                                                                            |
+| Legacy backfill                         | No legacy data exists after the wipe                                                                                                      |
 
 ## 13. Migration and rollout
 

@@ -1,5 +1,17 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
+import { createClient } from "@supabase/supabase-js";
+
+// Mirrors src/lib/util.ts's normalizeName — Deno can't import from src/lib, so
+// this is a hand-kept duplicate. Format characters (\p{Cf}: zero-width space,
+// soft hyphen, etc.) survive trim() but not this, because names are stored
+// through the same normaliser. Keep the two in step by hand.
+function normalizeName(s: string): string {
+  return s
+    .replace(/\p{Cf}/gu, "")
+    .trim()
+    .toLowerCase();
+}
 
 export default {
   fetch: withSupabase({ auth: ["publishable"] }, async (req) => {
@@ -15,7 +27,7 @@ export default {
       return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
     }
 
-    const clean = (typeof name === "string" ? name : "").trim().toLowerCase();
+    const clean = normalizeName(typeof name === "string" ? name : "");
     const codeStr = typeof code === "string" ? code : "";
 
     // ── validate entry code ──
@@ -28,20 +40,32 @@ export default {
       return Response.json({ ok: false, error: "code" });
     }
 
-    // ── validate name against allowlist ──
-    // Set ALLOWED_NAMES secret as comma-separated: "bhavin,abhishek,deven"
-    const allowedRaw = Deno.env.get("ALLOWED_NAMES") ?? "";
-    const allowed = allowedRaw
-      .split(",")
-      .map((n) => n.trim().toLowerCase())
-      .filter(Boolean);
-
-    if (allowed.length === 0) {
-      // Fail closed: ALLOWED_NAMES must be configured
+    // ── validate name against the users table ──
+    // Needs the service-role key, not the publishable one: the gate runs
+    // before there is a session for RLS to authorise against.
+    const url = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !serviceKey) {
+      // Fail closed, exactly as a missing ENTRY_CODE does.
       return Response.json({ ok: false, error: "config" }, { status: 500 });
     }
 
-    if (!clean || !allowed.includes(clean)) {
+    if (!clean) {
+      return Response.json({ ok: false, error: "name" });
+    }
+
+    const admin = createClient(url, serviceKey);
+    const { data, error } = await admin
+      .from("users")
+      .select("id")
+      .eq("name", clean)
+      .eq("can_login", true)
+      .limit(1);
+
+    if (error) {
+      return Response.json({ ok: false, error: "config" }, { status: 500 });
+    }
+    if (!data || data.length === 0) {
       return Response.json({ ok: false, error: "name" });
     }
 

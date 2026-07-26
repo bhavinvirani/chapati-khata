@@ -105,7 +105,7 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
   const date = typeof body.date === "string" ? body.date : "";
 
   if (!payerEmail || people.length === 0 || !Number.isFinite(totalCost) || !description || !date) {
-    return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
+    return Response.json({ ok: false, error: "bad_request" });
   }
 
   const sum = Math.round(people.reduce((s, p) => s + p.amount, 0) * 100);
@@ -117,7 +117,7 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
   try {
     members = await groupMembers(apiKey, groupId);
   } catch {
-    return Response.json({ ok: false, error: "network" }, { status: 502 });
+    return Response.json({ ok: false, error: "network" });
   }
   const byEmail = new Map(members.map((m) => [m.email, m.id]));
 
@@ -149,7 +149,7 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
   try {
     categoryId = await resolveCategoryId(apiKey, "Groceries");
   } catch {
-    return Response.json({ ok: false, error: "network" }, { status: 502 });
+    return Response.json({ ok: false, error: "network" });
   }
 
   const params: Record<string, string> = {
@@ -172,7 +172,7 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
   try {
     json = await splitwiseFetch("create_expense", apiKey, params);
   } catch {
-    return Response.json({ ok: false, error: "network" }, { status: 502 });
+    return Response.json({ ok: false, error: "network" });
   }
 
   // "200 OK does not indicate a successful response" — success means an
@@ -189,13 +189,13 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
 
 async function handleDelete(apiKey: string, body: Record<string, unknown>) {
   const expenseId = typeof body.expense_id === "string" ? body.expense_id : "";
-  if (!expenseId) return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
+  if (!expenseId) return Response.json({ ok: false, error: "bad_request" });
 
   let json: { success?: boolean; errors?: Record<string, unknown> };
   try {
     json = await splitwiseFetch(`delete_expense/${expenseId}`, apiKey, {});
   } catch {
-    return Response.json({ ok: false, error: "network" }, { status: 502 });
+    return Response.json({ ok: false, error: "network" });
   }
   if (json.success) return Response.json({ ok: true });
 
@@ -209,7 +209,7 @@ async function handleDelete(apiKey: string, body: Record<string, unknown>) {
       return Response.json({ ok: true });
     }
   } catch {
-    return Response.json({ ok: false, error: "network" }, { status: 502 });
+    return Response.json({ ok: false, error: "network" });
   }
   return Response.json({ ok: false, error: "splitwise", detail: JSON.stringify(json.errors ?? {}) });
 }
@@ -226,14 +226,14 @@ export default {
     const apiKey = Deno.env.get("SPLITWISE_API_KEY");
     const groupId = Deno.env.get("SPLITWISE_GROUP_ID");
     if (!apiKey || !groupId) {
-      return Response.json({ ok: false, error: "config" }, { status: 500 });
+      return Response.json({ ok: false, error: "config" });
     }
 
     let body: Record<string, unknown>;
     try {
       body = await req.json();
     } catch {
-      return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
+      return Response.json({ ok: false, error: "bad_request" });
     }
 
     switch (body.action) {
@@ -244,7 +244,7 @@ export default {
       case "delete":
         return handleDelete(apiKey, body);
       default:
-        return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
+        return Response.json({ ok: false, error: "bad_request" });
     }
   }),
 };

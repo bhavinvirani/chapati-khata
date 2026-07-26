@@ -46,7 +46,7 @@ html, body, #root{ min-height:100%; }
 @keyframes spin{ to{ transform:rotate(360deg); } }
 
 .seg{ display:flex; gap:4px; margin:2px 18px 0; background:var(--line-2); padding:4px; border-radius:14px; }
-.seg-b{ flex:1; padding:12px 9px; border-radius:10px; font-weight:700; font-size:14px; color:var(--soft); transition:.18s; }
+.seg-b{ flex:1; padding:12px 9px; border-radius:10px; font-weight:700; font-size:14px; color:var(--soft); transition:.18s; min-height:44px; }
 .seg-b.on{ background:var(--card); color:var(--ink); box-shadow:0 1px 3px rgba(60,45,15,.1); }
 
 .banner{ margin:12px 18px 0; background:var(--brick-tint); border:1px solid #EECBBF; color:var(--brick); border-radius:12px; padding:10px 13px; font-size:13px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
@@ -131,7 +131,7 @@ html, body, #root{ min-height:100%; }
 .empty p{ font-family:var(--disp); font-weight:700; font-size:17px; color:var(--ink); margin-top:6px; }
 .empty span{ font-size:13.5px; color:var(--faint); max-width:260px; line-height:1.5; }
 .foot{ text-align:center; font-size:11.5px; color:var(--faint); padding:6px 0 4px; letter-spacing:.02em; }
-.foot-link{ color:var(--marigold-deep); font-weight:700; text-decoration:underline; text-underline-offset:2px; font-size:11.5px; padding:4px; }
+.foot-link{ color:var(--marigold-deep); font-weight:700; text-decoration:underline; text-underline-offset:2px; font-size:11.5px; padding:4px 10px; min-height:44px; display:inline-flex; align-items:center; }
 
 .log-intro{ font-size:13px; color:var(--soft); padding:2px 2px 4px; }
 .log{ list-style:none; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
@@ -156,7 +156,7 @@ html, body, #root{ min-height:100%; }
 
 .ovl{ position:fixed; inset:0; background:rgba(40,30,15,.42); display:flex; align-items:flex-end; justify-content:center; z-index:50; animation:fade .16s ease; backdrop-filter:blur(1.5px); }
 @keyframes fade{ from{ opacity:0; } }
-.dlg{ background:var(--card); width:100%; max-width:400px; margin:auto 16px; border-radius:20px; padding:22px; animation:pop .2s cubic-bezier(.2,.9,.3,1.2); box-shadow:0 20px 50px rgba(40,30,15,.25); }
+.dlg{ background:var(--card); width:100%; max-width:400px; margin:auto 16px; border-radius:20px; padding:22px; animation:pop .2s cubic-bezier(.2,.9,.3,1.2); box-shadow:0 20px 50px rgba(40,30,15,.25); max-height:88vh; max-height:88dvh; overflow-y:auto; overscroll-behavior:contain; }
 @keyframes pop{ from{ transform:scale(.94); opacity:0; } }
 .dlg-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
 .dlg-t{ font-family:var(--disp); font-weight:800; font-size:19px; letter-spacing:-.2px; }
@@ -164,7 +164,11 @@ html, body, #root{ min-height:100%; }
 .dlg-a{ display:flex; gap:10px; }
 .dlg-a .btn{ flex:1; }
 
-.sheet{ background:var(--card); width:100%; max-width:460px; border-radius:24px 24px 0 0; padding:10px 20px calc(22px + env(safe-area-inset-bottom)); animation:up .24s cubic-bezier(.2,.9,.3,1); box-shadow:0 -10px 40px rgba(40,30,15,.2); }
+/* Cap and scroll. The overlay pins sheets to the bottom, so one taller than
+   the screen loses its top edge — with eight people in a split that meant the
+   total field and the close button were simply unreachable on a phone. dvh
+   first so mobile browser chrome is accounted for, vh as the fallback. */
+.sheet{ background:var(--card); width:100%; max-width:460px; border-radius:24px 24px 0 0; padding:10px 20px calc(22px + env(safe-area-inset-bottom)); animation:up .24s cubic-bezier(.2,.9,.3,1); box-shadow:0 -10px 40px rgba(40,30,15,.2); max-height:92vh; max-height:92dvh; overflow-y:auto; overscroll-behavior:contain; }
 @keyframes up{ from{ transform:translateY(100%); } }
 .sheet-grip{ width:40px; height:4px; border-radius:99px; background:var(--line); margin:2px auto 12px; }
 .sheet-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
@@ -214,7 +218,7 @@ html, body, #root{ min-height:100%; }
 /* ── split composer ── */
 .split{ margin-top:10px; }
 .split-fills{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
-.btn.split-fill{ padding:8px 12px; font-size:13px; min-height:36px; border-radius:10px; }
+.btn.split-fill{ padding:9px 13px; font-size:13px; min-height:44px; border-radius:10px; }
 .split-rows{ list-style:none; padding:0; display:flex; flex-direction:column; gap:6px; }
 .split-row{ display:flex; align-items:center; gap:10px; }
 .split-name{ flex:1; font-size:14.5px; color:var(--ink); }
@@ -226,13 +230,13 @@ html, body, #root{ min-height:100%; }
 
 /* ── day / add / share rows ── */
 .day{ border-top:1px dashed var(--line); padding:8px 8px 10px; }
-.day-head{ display:flex; align-items:baseline; gap:10px; width:100%; text-align:left; background:none; padding:2px 0; min-height:36px; }
+.day-head{ display:flex; align-items:baseline; gap:10px; width:100%; text-align:left; background:none; padding:6px 0; min-height:44px; }
 .day-people{ margin:2px 0 6px 78px; }
 .settle{ margin:2px 0 4px; max-height:44vh; overflow-y:auto; }
 .settle-when{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; font-size:12.5px; color:var(--soft); padding-bottom:7px; border-bottom:1px dashed var(--line); margin-bottom:7px; }
 .settle-days{ color:var(--faint); flex-shrink:0; }
 .log-detail{ font-size:12px; color:var(--soft); margin-top:3px; line-height:1.45; }
-.settle-days-btn{ font-size:12px; color:var(--marigold-deep); font-weight:700; padding:6px 0; min-height:32px; }
+.settle-days-btn{ font-size:12.5px; color:var(--marigold-deep); font-weight:700; padding:10px 0; min-height:44px; }
 .settle-day{ display:flex; align-items:baseline; gap:10px; font-size:12.5px; color:var(--soft); padding:3px 0; }
 .settle-day .row-day{ width:auto; flex:1; }
 .settle-total{ display:flex; align-items:baseline; gap:10px; font-size:13.5px; font-weight:700; border-top:1px dashed var(--line); margin-top:7px; padding-top:7px; }
@@ -244,13 +248,13 @@ html, body, #root{ min-height:100%; }
 .split-chips{ display:flex; flex-wrap:wrap; gap:6px; }
 /* Two classes deep on purpose: `.khata button` resets border and background,
    and a bare `.chip` loses to it. Same trick as `.btn.btn-solid`. */
-.split-chips .chip{ font-size:12.5px; padding:7px 12px; border-radius:99px; border:1.4px solid var(--line); background:var(--card); color:var(--faint); font-weight:600; min-height:34px; transition:border-color .15s, background .15s, color .15s; }
+.split-chips .chip{ font-size:12.5px; padding:10px 14px; border-radius:99px; border:1.4px solid var(--line); background:var(--card); color:var(--faint); font-weight:600; min-height:44px; transition:border-color .15s, background .15s, color .15s; }
 .split-chips .chip.on{ border-color:var(--marigold); background:var(--marigold-tint, #FDF3E0); color:var(--marigold-deep); font-weight:700; }
 .split-chips .chip:active{ transform:translateY(1px); }
 .split-chips .chip:disabled{ opacity:.5; }
 .day-tot{ flex:1; font-size:13px; color:var(--soft); }
 .add-line{ position:relative; margin:6px 0 0 78px; padding-right:40px; }
-.add-line-main{ display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; background:none; padding:6px 0; min-height:36px; }
+.add-line-main{ display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; background:none; padding:9px 0; min-height:44px; }
 .add-line-qty{ font-family:var(--mono); font-size:14px; color:var(--ink); flex:1; }
 .add-line-edit{ position:absolute; top:2px; right:0; }
 .add-line.broken{ background:var(--brick-tint); border-radius:8px; padding:4px 40px 4px 8px; }

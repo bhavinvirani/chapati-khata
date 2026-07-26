@@ -153,6 +153,7 @@ html, body, #root{ min-height:100%; }
 .log-dot.c-paid{ background:var(--herb); }
 .log-dot.c-open{ background:var(--soft); }
 .log-dot.c-login{ background:var(--marigold-deep); }
+.log-dot.c-people{ background:var(--herb); }
 .log-actor{ color:var(--ink); }
 .log-what{ font-size:14px; line-height:1.35; }
 .log-when{ font-size:11.5px; color:var(--faint); font-family:var(--mono); margin-top:3px; }

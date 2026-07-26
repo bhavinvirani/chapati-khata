@@ -23,6 +23,18 @@ function logText(ev: LogRow): string {
       return `reopened ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"}`;
     case "login":
       return "signed in";
+    case "user_add":
+      return `added ${ev.target ?? "someone"}`;
+    case "user_delete":
+      return `deleted ${ev.target ?? "someone"}`;
+    case "user_split_on":
+      return `put ${ev.target ?? "someone"} in the split`;
+    case "user_split_off":
+      return `took ${ev.target ?? "someone"} out of the split`;
+    case "user_login_on":
+      return `gave ${ev.target ?? "someone"} access`;
+    case "user_login_off":
+      return `revoked ${ev.target ?? "someone"}'s access`;
     default:
       return ev.action;
   }
@@ -60,6 +72,12 @@ const KIND: Record<string, string> = {
   paid: "c-paid",
   reopen: "c-open",
   login: "c-login",
+  user_add: "c-people",
+  user_delete: "c-del",
+  user_split_on: "c-people",
+  user_split_off: "c-people",
+  user_login_on: "c-people",
+  user_login_off: "c-del",
 };
 
 interface Props {

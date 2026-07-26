@@ -144,7 +144,7 @@ export default function App() {
   }
 
   function exportJSON() {
-    const payload = { exported_at: new Date().toISOString(), weeks, entries, logs };
+    const payload = { exported_at: new Date().toISOString(), weeks, users, entries, logs };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

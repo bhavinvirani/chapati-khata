@@ -89,7 +89,17 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen }
                     </button>
                   )}
 
-                  {broken && (
+                  {/* Repairing changes the add's qty and amount, so on a paid
+                      week it would move a total already handed to the shop.
+                      Say what is wrong either way; offer the actions only
+                      while the week is still open. */}
+                  {broken && w.paid && (
+                    <div className="repair">
+                      <span>This add was not fully split. Reopen the week to fix it.</span>
+                    </div>
+                  )}
+
+                  {broken && !w.paid && (
                     <div className="repair">
                       <span>This add was not fully split.</span>
                       <div className="repair-a">

@@ -41,13 +41,23 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
   }, [selectedDate, weeks, entries]);
 
   // Numbers from the most recent add anywhere, for the "Same as last" fill.
+  //
+  // Filtered to people currently in the split, which §4.8 requires. An
+  // unfiltered version is worse than it looks: a person toggled out since the
+  // last add gets an allocation with no box on screen, and because the
+  // remainder counts every key it still reads "All allocated" — so they are
+  // billed invisibly. Retype the visible boxes to the total instead and the
+  // form deadlocks at "over-allocated" with no box that can correct it.
   const lastAdd = useMemo(() => {
     const latest = [...entries].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-    if (!latest || latest.entry_shares.length === 0) return null;
+    if (!latest) return null;
+    const eligible = new Set(members.map((m) => m.id));
     const out: Alloc = {};
-    for (const s of latest.entry_shares) out[s.user_id] = s.qty;
-    return out;
-  }, [entries]);
+    for (const s of latest.entry_shares) {
+      if (eligible.has(s.user_id)) out[s.user_id] = s.qty;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  }, [entries, members]);
 
   // Prefill only on a day's first add. A same-day top-up starts blank: the
   // morning's 45-across-seven is the wrong shape for an evening 20-across-two.
@@ -68,6 +78,8 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
 
   const left = remaining(total, rows);
   const canAdd = total > 0 && left === 0 && !busy;
+  const dayQty = dayAdds.reduce((sum, e) => sum + e.qty, 0);
+  const dayAmount = dayAdds.reduce((sum, e) => sum + e.amount, 0);
 
   async function handleAdd() {
     setAddErr("");
@@ -156,9 +168,8 @@ export function AddForm({ entries, weeks, users, busy, onAdd }: Props) {
       {!addErr &&
         (dayAdds.length > 0 ? (
           <div className="add-hint">
-            {isToday ? "Today" : dayLabel(selectedDate)} so far &middot;{" "}
-            <b>{dayAdds.reduce((s, e) => s + e.qty, 0)}</b> chapatis &middot;{" "}
-            {money(dayAdds.reduce((s, e) => s + e.amount, 0))}
+            {isToday ? "Today" : dayLabel(selectedDate)} so far &middot; <b>{dayQty}</b> chapati
+            {dayQty !== 1 ? "s" : ""} &middot; {money(dayAmount)}
           </div>
         ) : (
           <div className="add-rate">{money(parsed?.price ?? DEFAULT_PRICE)} per chapati</div>

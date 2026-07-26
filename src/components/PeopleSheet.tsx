@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { User } from "../types";
 import { canDelete, canRevokeLogin, sortPeople } from "../lib/people";
 import * as db from "../lib/db";
-import { cap } from "../lib/util";
+import { cap, normalizeName } from "../lib/util";
 import { IcTrash, IcX } from "./icons";
 
 interface Props {
@@ -35,7 +35,7 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
   }
 
   async function handleAdd() {
-    const clean = newName.trim().toLowerCase();
+    const clean = normalizeName(newName);
     if (!clean) return;
     if (people.some((p) => p.name === clean)) {
       onError(`${cap(clean)} is already on the list.`);
@@ -47,9 +47,31 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
     });
   }
 
-  /** Deletion is offered only once we know the person holds no history. */
+  /**
+   * Deletion is offered only once we know the person holds no history AND that
+   * removing them would not revoke a login the group cannot afford to lose.
+   *
+   * The second check is not optional: deleting a row removes the name the gate
+   * matches on, so it is a strict superset of clearing `can_login`. Without it
+   * the sole login-holder — who, if they are out of the split, holds zero
+   * shares forever — could delete themselves and lock the group out entirely.
+   */
   async function askDelete(u: User) {
-    const held = await db.hasShares(u.id);
+    if (u.can_login && !canRevokeLogin(u, actor, users)) {
+      onError(
+        u.name === actor
+          ? "You cannot delete yourself while you can log in."
+          : `${cap(u.name)} is the last person who can log in.`,
+      );
+      return;
+    }
+    let held: boolean;
+    try {
+      held = await db.hasShares(u.id);
+    } catch {
+      onError("Could not check that. Check your connection.");
+      return;
+    }
     if (!canDelete(held)) {
       onError(`${cap(u.name)} appears in past entries and cannot be deleted.`);
       return;
@@ -80,7 +102,17 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
             const mayRevoke = canRevokeLogin(u, actor, users);
             return (
               <li key={u.id} className="ppl-row">
-                <span className="ppl-name">{cap(u.name)}</span>
+                <span className="ppl-name">
+                  {cap(u.name)}
+                  {u.name === actor && <span className="ppl-you">you</span>}
+                  {/* `title` never renders on a phone, and this is the sheet's
+                      one safety-critical control — say why it is blocked. */}
+                  {u.can_login && !mayRevoke && (
+                    <span className="ppl-why">
+                      {u.name === actor ? "can't remove your own access" : "last login"}
+                    </span>
+                  )}
+                </span>
 
                 <input
                   type="checkbox"
@@ -113,7 +145,7 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
 
                 <button
                   className="icon-btn"
-                  disabled={locked}
+                  disabled={locked || (u.can_login && !mayRevoke)}
                   onClick={() => askDelete(u)}
                   aria-label={`Delete ${u.name}`}
                 >
@@ -146,7 +178,10 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
 
         {pendingDelete && (
           <div className="del-confirm">
-            <span>Delete {cap(pendingDelete.name)}? They have no entries, so nothing is lost.</span>
+            <span>
+              Delete {cap(pendingDelete.name)}? They have no entries, so no history is lost — but
+              their access goes with them.
+            </span>
             <div className="sheet-a">
               <button className="btn btn-ghost" onClick={() => setPendingDelete(null)}>
                 Keep

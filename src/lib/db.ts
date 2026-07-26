@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { sharesAmount } from "./split";
 import type { ShareInput } from "./split";
 import type { Entry, LogAction, LogRow, User, Week } from "../types";
+import { normalizeName } from "./util";
 
 // This module owns every read/write. The rest of the app never talks to
 // Supabase directly — swap this one file to change backends.
@@ -303,7 +304,11 @@ export async function settleAll(weekIds: string[], actor: string, deviceId: stri
 
 /** Add someone. Names are lowercased and trimmed, as the gate expects. */
 export async function addPerson(name: string, actor: string, deviceId: string): Promise<void> {
-  const clean = name.trim().toLowerCase();
+  const clean = normalizeName(name);
+  // The boundary re-checks rather than trusting its caller. A blank name is
+  // accepted by `users.name` (not null, but '' is allowed), invisible in the
+  // list, and can never log in — and there is no rename to fix it with.
+  if (!clean) throw new Error("A person needs a name.");
   const { error } = await supabase.from("users").insert({ name: clean });
   if (error) fail("addPerson", error);
   await logAction({ actor, action: "user_add", target: clean, device_id: deviceId });

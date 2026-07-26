@@ -5,6 +5,20 @@ export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 10
 export const money = (n: number) => CURRENCY + round2(n).toFixed(2);
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/**
+ * Canonical form for a person's name: the key the gate matches on.
+ *
+ * Format characters are stripped before trimming. U+200B and friends are
+ * `Cf`, not whitespace, so `trim()` alone leaves them — and a name carrying an
+ * invisible character is unique, non-blank, and permanently unable to log in,
+ * with no rename to fix it.
+ */
+export const normalizeName = (s: string) =>
+  s
+    .replace(/\p{Cf}/gu, "")
+    .trim()
+    .toLowerCase();
+
 // ── dates ──
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

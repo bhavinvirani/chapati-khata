@@ -21,10 +21,12 @@ values ('bhavin'), ('abhishek'), ('deven'), ('parth'), ('pratik'), ('hitanshi'),
 on conflict (name) do nothing;
 
 -- ── one row per add, not per day ──
-alter table public.entries add column if not exists rate numeric(10,4);
-update public.entries set rate = case when qty > 0 then amount / qty else 0.5 end where rate is null;
-alter table public.entries alter column rate set not null;
-alter table public.entries add constraint entries_rate_check check (rate > 0);
+-- No backfill. This is a fresh start: the release wipes every row before this
+-- runs, so there is no legacy row whose real rate anyone could know. Against a
+-- non-empty table this fails immediately with "column rate contains null
+-- values" — loudly, rather than inventing a rate nobody can verify. That is
+-- the intended behaviour, not an oversight.
+alter table public.entries add column rate numeric(10,4) not null check (rate > 0);
 
 -- Several adds may now share a date. Not matched by the CI destructive-SQL
 -- guard, which looks for drop table/column/schema/extension — not constraints.
@@ -59,6 +61,12 @@ create policy "authed all - entry_shares" on public.entry_shares for all to auth
 -- RLS only takes effect once the role also holds the table-level grant;
 -- without this, queries fail with "permission denied for table ...".
 grant select, insert, update, delete on public.users, public.entry_shares to authenticated;
+
+-- The gate's edge function reads this table with the service-role key, before
+-- any session exists for RLS to authorise against. This project revoked the
+-- public schema's PUBLIC usage, so that access needs saying out loud.
+grant usage on schema public to service_role;
+grant select on public.users to service_role;
 
 -- ── realtime ──
 -- Guarded because `alter publication ... add table` has no `if not exists`

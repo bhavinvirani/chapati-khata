@@ -91,6 +91,12 @@ grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.weeks, public.entries, public.logs,
   public.users, public.entry_shares to authenticated;
 
+-- The gate's edge function reads this table with the service-role key, before
+-- any session exists for RLS to authorise against. This project revoked the
+-- public schema's PUBLIC usage, so that access needs saying out loud.
+grant usage on schema public to service_role;
+grant select on public.users to service_role;
+
 -- ── Realtime so every device sees changes instantly ──
 -- Guarded because `alter publication ... add table` has no `if not exists`
 -- form and errors ("already member of publication") on a second run.

@@ -101,6 +101,9 @@ jobs:
         # removes a Docker dependency from CI. Idempotent redeploy either way.
         if: steps.check.outputs.ready == 'true'
         run: supabase functions deploy validate-access --use-api --yes
+      - name: Deploy Splitwise function
+        if: steps.check.outputs.ready == 'true'
+        run: supabase functions deploy splitwise --use-api --yes
 
   build:
     needs: supabase-deploy

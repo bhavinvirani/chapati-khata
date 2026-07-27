@@ -11,7 +11,9 @@ describe("dateRangeLabel", () => {
   });
 
   it("appends the year only when asked", () => {
-    expect(dateRangeLabel(new Date(2026, 6, 13), new Date(2026, 6, 19), true)).toBe("Jul 13 – 19, 2026");
+    expect(dateRangeLabel(new Date(2026, 6, 13), new Date(2026, 6, 19), true)).toBe(
+      "Jul 13 – 19, 2026",
+    );
   });
 });
 

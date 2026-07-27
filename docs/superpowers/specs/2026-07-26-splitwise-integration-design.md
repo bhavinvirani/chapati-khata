@@ -13,7 +13,7 @@ balance to the cent.
 ## 2. What this is not
 
 - **Not a sync.** Nothing ever reads Splitwise's state back into this app.
-  This app only ever *creates* and, on reopen, *deletes* one expense per
+  This app only ever _creates_ and, on reopen, _deletes_ one expense per
   settlement. If someone edits the pushed expense inside Splitwise afterward,
   this app never finds out and never needs to.
 - **Not OAuth.** A personal Splitwise API key, held as a Supabase secret, is
@@ -274,7 +274,7 @@ device)`:
 
 1. Insert one `settlements` row.
 2. Update every week in `weekIds`: `paid = true`, `paid_at = <the
-   settlement's created_at>`, `settlement_id = <the new id>`.
+settlement's created_at>`, `settlement_id = <the new id>`.
 3. Log a `paid` row per week, as today.
 
 A single-week Mark Paid is `createSettlement([weekId], ...)` — there is no
@@ -289,7 +289,7 @@ separate single-week code path anymore.
 2. Confirm dialog shows the combined breakdown (`SettleSummary`, reused
    as-is) plus a payer picker defaulting to the current user.
 3. On confirm, calls the edge function with `{action: "push", payerEmail,
-   people: [{name, email, qty, amount}], totalCost, description, date}`.
+people: [{name, email, qty, amount}], totalCost, description, date}`.
 4. On `{ok: true, expense_id}`: write `splitwise_expense_id`,
    `splitwise_payer_user_id`, `splitwise_pushed_at` on the settlement; clear
    any prior `splitwise_status`. Log one `splitwise_push` row per week in the
@@ -363,11 +363,11 @@ Splitwise API using two secrets it alone holds:
 
 Three actions:
 
-| action   | request                                                                                 | response                                                    |
-|----------|------------------------------------------------------------------------------------------|--------------------------------------------------------------|
-| `link`   | `{ email }`                                                                               | `{ linked: true, splitwise_user_id, name }` or `{ linked: false }` |
-| `push`   | `{ payerEmail, people: [{ name, email, qty, amount }], totalCost, description, date }`    | `{ ok: true, expense_id }` or `{ ok: false, error, detail }` |
-| `delete` | `{ expense_id }`                                                                          | `{ ok: true }` or `{ ok: false, error }`                     |
+| action   | request                                                                                | response                                                           |
+| -------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `link`   | `{ email }`                                                                            | `{ linked: true, splitwise_user_id, name }` or `{ linked: false }` |
+| `push`   | `{ payerEmail, people: [{ name, email, qty, amount }], totalCost, description, date }` | `{ ok: true, expense_id }` or `{ ok: false, error, detail }`       |
+| `delete` | `{ expense_id }`                                                                       | `{ ok: true }` or `{ ok: false, error }`                           |
 
 ### 9.2 Why the edge function doesn't recompute the split
 
@@ -408,7 +408,7 @@ failure: `{ ok: false, ... }`, never `{ ok: true }`.
 - **LogView / logtext.ts**: two new `LogAction`s (`splitwise_push`,
   `splitwise_unpush`), each composed the same way `describeAdd`/`describeEdit`
   already compose their `detail` text at write time (e.g. `Roti Jul 6 – 19 ·
-  $42.00 · paid by bhavin`).
+$42.00 · paid by bhavin`).
 - **src/config.ts**: two new constants, `SPLITWISE_CURRENCY = "CAD"` and the
   Splitwise Groceries category id, alongside the existing `CURRENCY` and
   `DEFAULT_PRICE` — sent as part of the push request rather than hardcoded in
@@ -446,7 +446,7 @@ Order, mirroring how `deploy.yml` already sequences things:
    `validate-access`'s.
 3. Frontend builds and deploys.
 4. **Manually, once**: `supabase secrets set SPLITWISE_API_KEY=...
-   SPLITWISE_GROUP_ID=...` against the production project — using a freshly
+SPLITWISE_GROUP_ID=...` against the production project — using a freshly
    rotated key, since the one shared earlier in this conversation should be
    treated as burned.
 5. Link everyone's Splitwise email in the People sheet.

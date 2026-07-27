@@ -362,7 +362,9 @@ export async function reopenWeek(week: Week, actor: string, deviceId: string): P
   if (expenseId) {
     const result = await deleteSplitwiseExpense(expenseId);
     if (!result.ok) {
-      throw new Error(`Could not remove it from Splitwise (${result.error}). Nothing was reopened.`);
+      throw new Error(
+        `Could not remove it from Splitwise (${result.error}). Nothing was reopened.`,
+      );
     }
   }
 
@@ -381,7 +383,12 @@ export async function reopenWeek(week: Week, actor: string, deviceId: string): P
 
   for (const weekId of weekIds) {
     if (expenseId) {
-      await logAction({ actor, action: "splitwise_unpush", week_start: weekId, device_id: deviceId });
+      await logAction({
+        actor,
+        action: "splitwise_unpush",
+        week_start: weekId,
+        device_id: deviceId,
+      });
     }
     await logAction({ actor, action: "reopen", week_start: weekId, device_id: deviceId });
   }
@@ -489,8 +496,7 @@ export async function deleteSplitwiseExpense(
 }
 
 export type PushResult =
-  | { ok: true; expenseId: string }
-  | { ok: false; status?: "unknown"; error?: string };
+  { ok: true; expenseId: string } | { ok: false; status?: "unknown"; error?: string };
 
 /**
  * Push a settlement to Splitwise. On an ambiguous outcome (network error,
@@ -517,7 +523,14 @@ export async function pushSettlement(
   let data: { ok: boolean; expense_id?: string; error?: string } | undefined;
   try {
     const res = await supabase.functions.invoke("splitwise", {
-      body: { action: "push", payerEmail: payer.splitwise_email, people, totalCost, description, date },
+      body: {
+        action: "push",
+        payerEmail: payer.splitwise_email,
+        people,
+        totalCost,
+        description,
+        date,
+      },
     });
     if (res.error) invokeFailed = true;
     else data = res.data as { ok: boolean; expense_id?: string; error?: string };

@@ -15,7 +15,7 @@
 - CI fails on `DROP TABLE/COLUMN/SCHEMA/EXTENSION`, `TRUNCATE`, `DELETE FROM`, or a column type change without a `-- allow-destructive` comment. This feature's migration is additive-only (new table, new nullable columns) and needs no such marker.
 - `supabase/functions/**` is excluded from `eslint`, `prettier`, and `tsc` — it's Deno, owned by `deno fmt`/`deno lint` conventions, not the frontend toolchain. Don't try to run frontend lint/typecheck against it.
 - Vitest runs in a `node` environment, no `jsdom` — only pure functions in `src/lib` get unit tests here. Components (`PeopleSheet.tsx`, `WeekCard.tsx`, etc.) and `src/lib/db.ts` have no test files anywhere in this codebase today; this plan follows that existing convention rather than introducing a new one.
-- Default to no comments; add one only where it states a non-obvious *why* (a constraint, an invariant, a specific failure mode being guarded against) — matching every existing file's style in this codebase.
+- Default to no comments; add one only where it states a non-obvious _why_ (a constraint, an invariant, a specific failure mode being guarded against) — matching every existing file's style in this codebase.
 - Currency is fixed as `"CAD"`. The expense description is `Roti <date range>` (e.g. `Roti Jul 6 – 19`). The category is resolved by name (`"Groceries"`) at push time via Splitwise's `get_categories`, never a hardcoded numeric id (Splitwise's ids for this aren't something this plan can verify in advance, and resolving by name is one extra cheap API call instead of a guess that could be silently wrong).
 - The Splitwise API key that appeared earlier in this conversation must be rotated before it's used as a secret — treat the value already shared as burned.
 - Commit after each task's steps are green, using this repo's existing commit style (short, lowercase, `type: summary`).
@@ -25,10 +25,12 @@
 ## Task 1: Database migration + schema.sql sync
 
 **Files:**
+
 - Create: `supabase/migrations/20260726140000_splitwise.sql`
 - Modify: `supabase/schema.sql`
 
 **Interfaces:**
+
 - Produces: table `public.settlements` (columns: `id uuid`, `created_at timestamptz`, `actor text`, `device_id text`, `splitwise_payer_user_id uuid`, `splitwise_expense_id text`, `splitwise_status text`, `splitwise_pushed_at timestamptz`); `public.weeks.settlement_id uuid`; `public.users.splitwise_email text`; `public.users.splitwise_user_id text`. Every later task that touches the database depends on these existing.
 
 - [ ] **Step 1: Write the migration**
@@ -150,10 +152,12 @@ git commit -m "feat: add settlements table for Splitwise integration"
 ## Task 2: Types and config constants
 
 **Files:**
+
 - Modify: `src/types.ts`
 - Modify: `src/config.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `Settlement` interface; `User.splitwise_email: string | null`, `User.splitwise_user_id: string | null`; `Week.settlement_id: string | null`; `WeekView.settlement: Settlement | null`; `LogAction` gains `"splitwise_push" | "splitwise_unpush"`; `SPLITWISE_CURRENCY: string`, `SPLITWISE_CATEGORY_NAME: string` in `src/config.ts`.
 
@@ -243,7 +247,7 @@ export const SPLITWISE_CATEGORY_NAME = "Groceries";
 - [ ] **Step 3: Typecheck**
 
 Run: `npm run typecheck`
-Expected: fails right now with errors in `src/lib/aggregate.test.ts`/callers that construct a `Week`/`User` object without the new required fields — that's expected; those get fixed in later tasks that touch each file. Confirm the *only* new errors are missing-property errors on `Week`/`User`/`WeekView` literals, not something unrelated.
+Expected: fails right now with errors in `src/lib/aggregate.test.ts`/callers that construct a `Week`/`User` object without the new required fields — that's expected; those get fixed in later tasks that touch each file. Confirm the _only_ new errors are missing-property errors on `Week`/`User`/`WeekView` literals, not something unrelated.
 
 - [ ] **Step 4: Commit**
 
@@ -257,12 +261,14 @@ git commit -m "feat: add Settlement type and Splitwise config constants"
 ## Task 3: Pure Splitwise helper functions
 
 **Files:**
+
 - Modify: `src/lib/util.ts`
 - Modify: `src/lib/util.test.ts`
 - Create: `src/lib/splitwise.ts`
 - Create: `src/lib/splitwise.test.ts`
 
 **Interfaces:**
+
 - Consumes: `PersonTotal` from `src/lib/aggregate.ts` (`{ userId: string; qty: number; amount: number }`), `User` from `src/types.ts`.
 - Produces: `dateRangeLabel(start: Date, end: Date, withYear?: boolean): string` (exported from `util.ts`); `settlementLabel(weekIds: string[]): string`, `normalizeEmail(email: string): string`, `missingSplitwiseLinks(totals: PersonTotal[], users: User[]): string[]`, `SplitwisePerson` interface (`{ name: string; email: string; qty: number; amount: number }`), `buildSplitwisePeople(totals: PersonTotal[], users: User[]): SplitwisePerson[] | null` — all from `src/lib/splitwise.ts`. Later tasks (db.ts, App.tsx, WeekCard.tsx) call these by these exact names.
 
@@ -322,7 +328,9 @@ describe("dateRangeLabel", () => {
   });
 
   it("appends the year only when asked", () => {
-    expect(dateRangeLabel(new Date(2026, 6, 13), new Date(2026, 6, 19), true)).toBe("Jul 13 – 19, 2026");
+    expect(dateRangeLabel(new Date(2026, 6, 13), new Date(2026, 6, 19), true)).toBe(
+      "Jul 13 – 19, 2026",
+    );
   });
 });
 
@@ -501,11 +509,13 @@ git commit -m "feat: add Splitwise pure helpers (settlement label, share mapping
 ## Task 4: Splitwise edge function
 
 **Files:**
+
 - Create: `supabase/functions/splitwise/index.ts`
 - Create: `supabase/functions/splitwise/deno.json`
 - Create: `supabase/functions/splitwise/.npmrc`
 
 **Interfaces:**
+
 - Consumes: `SPLITWISE_API_KEY`, `SPLITWISE_GROUP_ID` (Supabase secrets, already set on both projects).
 - Produces: a POST endpoint at `<SUPABASE_URL>/functions/v1/splitwise` accepting `{action: "link", email}` / `{action: "push", payerEmail, people, totalCost, description, date}` / `{action: "delete", expense_id}`, requiring an authenticated Supabase session. This is the exact contract `src/lib/db.ts` (Task 6) calls via `supabase.functions.invoke("splitwise", {body: ...})`.
 
@@ -703,7 +713,11 @@ async function handleDelete(apiKey: string, body: Record<string, unknown>) {
   } catch {
     return Response.json({ ok: false, error: "network" }, { status: 502 });
   }
-  return Response.json({ ok: false, error: "splitwise", detail: JSON.stringify(json.errors ?? {}) });
+  return Response.json({
+    ok: false,
+    error: "splitwise",
+    detail: JSON.stringify(json.errors ?? {}),
+  });
 }
 
 export default {
@@ -781,9 +795,11 @@ git commit -m "feat: add Splitwise edge function (link/push/delete)"
 ## Task 5: db.ts — settlement write path
 
 **Files:**
+
 - Modify: `src/lib/db.ts`
 
 **Interfaces:**
+
 - Consumes: `Settlement`, `Week` from `src/types.ts` (Task 2).
 - Produces: `createSettlement(weekIds: string[], actor: string, deviceId: string): Promise<void>`, `reopenWeek(week: Week, actor: string, deviceId: string): Promise<void>`. These replace `setPaid`/`settleAll` as the public write path for paying/reopening — later tasks (App.tsx, Task 11) call these exact names. `reopenWeek` throws a plain `Error` with a human-readable message when a Splitwise delete genuinely fails (as opposed to returning a result object), which callers are expected to catch.
 
@@ -890,7 +906,9 @@ export async function reopenWeek(week: Week, actor: string, deviceId: string): P
   if (expenseId) {
     const result = await deleteSplitwiseExpense(expenseId);
     if (!result.ok) {
-      throw new Error(`Could not remove it from Splitwise (${result.error}). Nothing was reopened.`);
+      throw new Error(
+        `Could not remove it from Splitwise (${result.error}). Nothing was reopened.`,
+      );
     }
   }
 
@@ -909,7 +927,12 @@ export async function reopenWeek(week: Week, actor: string, deviceId: string): P
 
   for (const weekId of weekIds) {
     if (expenseId) {
-      await logAction({ actor, action: "splitwise_unpush", week_start: weekId, device_id: deviceId });
+      await logAction({
+        actor,
+        action: "splitwise_unpush",
+        week_start: weekId,
+        device_id: deviceId,
+      });
     }
     await logAction({ actor, action: "reopen", week_start: weekId, device_id: deviceId });
   }
@@ -930,9 +953,11 @@ git commit -m "feat: replace setPaid/settleAll with settlement-aware createSettl
 ## Task 6: db.ts — Splitwise edge function calls + data loading
 
 **Files:**
+
 - Modify: `src/lib/db.ts`
 
 **Interfaces:**
+
 - Consumes: `reopenWeek`'s call to `deleteSplitwiseExpense` (Task 5); `Settlement`, `SplitwisePerson` (`src/lib/splitwise.ts`, Task 3).
 - Produces: `checkSplitwiseLink(email: string): Promise<{linked: boolean; splitwiseUserId: string | null}>`, `setSplitwiseEmail(user: User, email: string, actor: string, deviceId: string): Promise<void>`, `deleteSplitwiseExpense(expenseId: string): Promise<{ok: boolean; error?: string}>`, `pushSettlement(settlementId: string, payer: User, people: SplitwisePerson[], totalCost: number, description: string, date: string, actor: string, deviceId: string, weekIds: string[]): Promise<PushResult>` where `PushResult = {ok: true; expenseId: string} | {ok: false; status?: "unknown"; error?: string}`. `loadActive()`'s return type gains `settlements: Settlement[]`. These are the exact names Task 7 (`useKhataData`), Task 8 (`PeopleSheet`), Task 9 (`WeekCard`), and Task 10/11 (`App.tsx`) call.
 
@@ -1085,8 +1110,7 @@ export async function deleteSplitwiseExpense(
 }
 
 export type PushResult =
-  | { ok: true; expenseId: string }
-  | { ok: false; status?: "unknown"; error?: string };
+  { ok: true; expenseId: string } | { ok: false; status?: "unknown"; error?: string };
 
 /**
  * Push a settlement to Splitwise. On an ambiguous outcome (network error,
@@ -1113,7 +1137,14 @@ export async function pushSettlement(
   let data: { ok: boolean; expense_id?: string; error?: string } | undefined;
   try {
     const res = await supabase.functions.invoke("splitwise", {
-      body: { action: "push", payerEmail: payer.splitwise_email, people, totalCost, description, date },
+      body: {
+        action: "push",
+        payerEmail: payer.splitwise_email,
+        people,
+        totalCost,
+        description,
+        date,
+      },
     });
     if (res.error) invokeFailed = true;
     else data = res.data as { ok: boolean; expense_id?: string; error?: string };
@@ -1192,9 +1223,11 @@ git commit -m "feat: add Splitwise link/push/delete calls to db.ts"
 ## Task 7: useKhataData.ts — load settlements, merge into WeekView
 
 **Files:**
+
 - Modify: `src/hooks/useKhataData.ts`
 
 **Interfaces:**
+
 - Consumes: `db.loadActive()`'s new `settlements` field (Task 6), `Settlement` type (Task 2).
 - Produces: every `WeekView` returned by this hook now has `settlement: Settlement | null` populated. `App.tsx` (Tasks 10–11) reads `w.settlement` directly off the objects this hook returns.
 
@@ -1209,81 +1242,81 @@ import type { Entry, LogRow, Settlement, User, Week, WeekView } from "../types";
 Add state alongside `logs`:
 
 ```ts
-  const [logs, setLogs] = useState<LogRow[]>([]);
-  const [settlements, setSettlements] = useState<Settlement[]>([]);
+const [logs, setLogs] = useState<LogRow[]>([]);
+const [settlements, setSettlements] = useState<Settlement[]>([]);
 ```
 
 In `load()`, after `setLogs(data.logs);`, add:
 
 ```ts
-      setSettlements(data.settlements);
+setSettlements(data.settlements);
 ```
 
 In the `weekViews` `useMemo`, add a lookup map and use it when building each view. Change:
 
 ```ts
-  const weekViews: WeekView[] = useMemo(() => {
-    const byWeek = new Map<string, Entry[]>();
-    for (const e of allEntries) {
-      const arr = byWeek.get(e.week_start) ?? [];
-      arr.push(e);
-      byWeek.set(e.week_start, arr);
-    }
-    const paidMap = new Map(weeks.map((w) => [w.week_start, w]));
-    const ids = new Set<string>([
-      ...weeks.map((w) => w.week_start),
-      ...allEntries.map((e) => e.week_start),
-    ]);
-    const views: WeekView[] = [];
-    ids.forEach((id) => {
-      const es = byWeek.get(id) ?? [];
-      const wk = paidMap.get(id);
-      views.push({
-        week_start: id,
-        paid: wk?.paid ?? false,
-        paid_at: wk?.paid_at ?? null,
-        entries: es,
-        total: round2(es.reduce((s, e) => s + e.amount, 0)),
-        count: es.reduce((s, e) => s + e.qty, 0),
-      });
+const weekViews: WeekView[] = useMemo(() => {
+  const byWeek = new Map<string, Entry[]>();
+  for (const e of allEntries) {
+    const arr = byWeek.get(e.week_start) ?? [];
+    arr.push(e);
+    byWeek.set(e.week_start, arr);
+  }
+  const paidMap = new Map(weeks.map((w) => [w.week_start, w]));
+  const ids = new Set<string>([
+    ...weeks.map((w) => w.week_start),
+    ...allEntries.map((e) => e.week_start),
+  ]);
+  const views: WeekView[] = [];
+  ids.forEach((id) => {
+    const es = byWeek.get(id) ?? [];
+    const wk = paidMap.get(id);
+    views.push({
+      week_start: id,
+      paid: wk?.paid ?? false,
+      paid_at: wk?.paid_at ?? null,
+      entries: es,
+      total: round2(es.reduce((s, e) => s + e.amount, 0)),
+      count: es.reduce((s, e) => s + e.qty, 0),
     });
-    return views.sort((a, b) => (a.week_start < b.week_start ? 1 : -1));
-  }, [weeks, allEntries]);
+  });
+  return views.sort((a, b) => (a.week_start < b.week_start ? 1 : -1));
+}, [weeks, allEntries]);
 ```
 
 to:
 
 ```ts
-  const weekViews: WeekView[] = useMemo(() => {
-    const byWeek = new Map<string, Entry[]>();
-    for (const e of allEntries) {
-      const arr = byWeek.get(e.week_start) ?? [];
-      arr.push(e);
-      byWeek.set(e.week_start, arr);
-    }
-    const paidMap = new Map(weeks.map((w) => [w.week_start, w]));
-    const settlementsById = new Map(settlements.map((s) => [s.id, s]));
-    const ids = new Set<string>([
-      ...weeks.map((w) => w.week_start),
-      ...allEntries.map((e) => e.week_start),
-    ]);
-    const views: WeekView[] = [];
-    ids.forEach((id) => {
-      const es = byWeek.get(id) ?? [];
-      const wk = paidMap.get(id);
-      views.push({
-        week_start: id,
-        paid: wk?.paid ?? false,
-        paid_at: wk?.paid_at ?? null,
-        settlement_id: wk?.settlement_id ?? null,
-        settlement: wk?.settlement_id ? (settlementsById.get(wk.settlement_id) ?? null) : null,
-        entries: es,
-        total: round2(es.reduce((s, e) => s + e.amount, 0)),
-        count: es.reduce((s, e) => s + e.qty, 0),
-      });
+const weekViews: WeekView[] = useMemo(() => {
+  const byWeek = new Map<string, Entry[]>();
+  for (const e of allEntries) {
+    const arr = byWeek.get(e.week_start) ?? [];
+    arr.push(e);
+    byWeek.set(e.week_start, arr);
+  }
+  const paidMap = new Map(weeks.map((w) => [w.week_start, w]));
+  const settlementsById = new Map(settlements.map((s) => [s.id, s]));
+  const ids = new Set<string>([
+    ...weeks.map((w) => w.week_start),
+    ...allEntries.map((e) => e.week_start),
+  ]);
+  const views: WeekView[] = [];
+  ids.forEach((id) => {
+    const es = byWeek.get(id) ?? [];
+    const wk = paidMap.get(id);
+    views.push({
+      week_start: id,
+      paid: wk?.paid ?? false,
+      paid_at: wk?.paid_at ?? null,
+      settlement_id: wk?.settlement_id ?? null,
+      settlement: wk?.settlement_id ? (settlementsById.get(wk.settlement_id) ?? null) : null,
+      entries: es,
+      total: round2(es.reduce((s, e) => s + e.amount, 0)),
+      count: es.reduce((s, e) => s + e.qty, 0),
     });
-    return views.sort((a, b) => (a.week_start < b.week_start ? 1 : -1));
-  }, [weeks, allEntries, settlements]);
+  });
+  return views.sort((a, b) => (a.week_start < b.week_start ? 1 : -1));
+}, [weeks, allEntries, settlements]);
 ```
 
 - [ ] **Step 2: Typecheck**
@@ -1303,10 +1336,12 @@ git commit -m "feat: load settlements and merge push status into WeekView"
 ## Task 8: PeopleSheet.tsx — Splitwise email linking UI
 
 **Files:**
+
 - Modify: `src/components/PeopleSheet.tsx`
 - Modify: `src/styles.css`
 
 **Interfaces:**
+
 - Consumes: `db.setSplitwiseEmail` (Task 6), `User.splitwise_email`/`splitwise_user_id` (Task 2).
 - Produces: no new exports — this is a leaf UI change.
 
@@ -1342,7 +1377,9 @@ function EmailRow({
         aria-label={`${user.name}'s Splitwise email`}
       />
       {value && (
-        <span className={"ppl-linked" + (linked ? " on" : "")}>{linked ? "Linked" : "Not linked"}</span>
+        <span className={"ppl-linked" + (linked ? " on" : "")}>
+          {linked ? "Linked" : "Not linked"}
+        </span>
       )}
     </div>
   );
@@ -1352,138 +1389,130 @@ function EmailRow({
 Add a handler inside `PeopleSheet` (alongside `askDelete`/`handleAdd`), which rejects a duplicate email the same way `handleAdd` rejects a duplicate name:
 
 ```tsx
-  async function handleEmailSave(target: User, email: string) {
-    const clean = email.trim();
-    if (clean) {
-      const dupe = people.find(
-        (p) => p.id !== target.id && p.splitwise_email?.toLowerCase() === clean.toLowerCase(),
-      );
-      if (dupe) {
-        onError(`That email is already linked to ${cap(dupe.name)}.`);
-        return;
-      }
+async function handleEmailSave(target: User, email: string) {
+  const clean = email.trim();
+  if (clean) {
+    const dupe = people.find(
+      (p) => p.id !== target.id && p.splitwise_email?.toLowerCase() === clean.toLowerCase(),
+    );
+    if (dupe) {
+      onError(`That email is already linked to ${cap(dupe.name)}.`);
+      return;
     }
-    await run(() => db.setSplitwiseEmail(target, clean));
   }
+  await run(() => db.setSplitwiseEmail(target, clean));
+}
 ```
 
 Wire it into each row's markup — restructure the existing `<li key={u.id} className="ppl-row">` block. Change:
 
 ```tsx
-              <li key={u.id} className="ppl-row">
-                <span className="ppl-name">
-                  {cap(u.name)}
-                  {u.name === actor && <span className="ppl-you">you</span>}
-                  {/* `title` never renders on a phone, and this is the sheet's
+<li key={u.id} className="ppl-row">
+  <span className="ppl-name">
+    {cap(u.name)}
+    {u.name === actor && <span className="ppl-you">you</span>}
+    {/* `title` never renders on a phone, and this is the sheet's
                       one safety-critical control — say why it is blocked. */}
-                  {u.can_login && !mayRevoke && (
-                    <span className="ppl-why">
-                      {u.name === actor ? "can't remove your own access" : "last login"}
-                    </span>
-                  )}
-                </span>
+    {u.can_login && !mayRevoke && (
+      <span className="ppl-why">
+        {u.name === actor ? "can't remove your own access" : "last login"}
+      </span>
+    )}
+  </span>
 
-                <input
-                  type="checkbox"
-                  className="ppl-box"
-                  checked={u.in_split}
-                  disabled={locked}
-                  onChange={(e) =>
-                    run(() => db.setPersonFlag(u, "in_split", e.target.checked, actor, deviceId))
-                  }
-                  aria-label={`${u.name} in split`}
-                />
+  <input
+    type="checkbox"
+    className="ppl-box"
+    checked={u.in_split}
+    disabled={locked}
+    onChange={(e) => run(() => db.setPersonFlag(u, "in_split", e.target.checked, actor, deviceId))}
+    aria-label={`${u.name} in split`}
+  />
 
-                <input
-                  type="checkbox"
-                  className="ppl-box"
-                  checked={u.can_login}
-                  disabled={locked || (u.can_login && !mayRevoke)}
-                  title={
-                    u.can_login && !mayRevoke
-                      ? u.name === actor
-                        ? "You cannot revoke your own access"
-                        : "Someone must be able to log in"
-                      : undefined
-                  }
-                  onChange={(e) =>
-                    run(() => db.setPersonFlag(u, "can_login", e.target.checked, actor, deviceId))
-                  }
-                  aria-label={`${u.name} can log in`}
-                />
+  <input
+    type="checkbox"
+    className="ppl-box"
+    checked={u.can_login}
+    disabled={locked || (u.can_login && !mayRevoke)}
+    title={
+      u.can_login && !mayRevoke
+        ? u.name === actor
+          ? "You cannot revoke your own access"
+          : "Someone must be able to log in"
+        : undefined
+    }
+    onChange={(e) => run(() => db.setPersonFlag(u, "can_login", e.target.checked, actor, deviceId))}
+    aria-label={`${u.name} can log in`}
+  />
 
-                <button
-                  className="icon-btn"
-                  disabled={locked || (u.can_login && !mayRevoke)}
-                  onClick={() => askDelete(u)}
-                  aria-label={`Delete ${u.name}`}
-                >
-                  <IcTrash className="ic sm" />
-                </button>
-              </li>
+  <button
+    className="icon-btn"
+    disabled={locked || (u.can_login && !mayRevoke)}
+    onClick={() => askDelete(u)}
+    aria-label={`Delete ${u.name}`}
+  >
+    <IcTrash className="ic sm" />
+  </button>
+</li>
 ```
 
 to:
 
 ```tsx
-              <li key={u.id} className="ppl-row">
-                <div className="ppl-row-main">
-                  <span className="ppl-name">
-                    {cap(u.name)}
-                    {u.name === actor && <span className="ppl-you">you</span>}
-                    {/* `title` never renders on a phone, and this is the sheet's
+<li key={u.id} className="ppl-row">
+  <div className="ppl-row-main">
+    <span className="ppl-name">
+      {cap(u.name)}
+      {u.name === actor && <span className="ppl-you">you</span>}
+      {/* `title` never renders on a phone, and this is the sheet's
                         one safety-critical control — say why it is blocked. */}
-                    {u.can_login && !mayRevoke && (
-                      <span className="ppl-why">
-                        {u.name === actor ? "can't remove your own access" : "last login"}
-                      </span>
-                    )}
-                  </span>
+      {u.can_login && !mayRevoke && (
+        <span className="ppl-why">
+          {u.name === actor ? "can't remove your own access" : "last login"}
+        </span>
+      )}
+    </span>
 
-                  <input
-                    type="checkbox"
-                    className="ppl-box"
-                    checked={u.in_split}
-                    disabled={locked}
-                    onChange={(e) =>
-                      run(() => db.setPersonFlag(u, "in_split", e.target.checked, actor, deviceId))
-                    }
-                    aria-label={`${u.name} in split`}
-                  />
+    <input
+      type="checkbox"
+      className="ppl-box"
+      checked={u.in_split}
+      disabled={locked}
+      onChange={(e) =>
+        run(() => db.setPersonFlag(u, "in_split", e.target.checked, actor, deviceId))
+      }
+      aria-label={`${u.name} in split`}
+    />
 
-                  <input
-                    type="checkbox"
-                    className="ppl-box"
-                    checked={u.can_login}
-                    disabled={locked || (u.can_login && !mayRevoke)}
-                    title={
-                      u.can_login && !mayRevoke
-                        ? u.name === actor
-                          ? "You cannot revoke your own access"
-                          : "Someone must be able to log in"
-                        : undefined
-                    }
-                    onChange={(e) =>
-                      run(() => db.setPersonFlag(u, "can_login", e.target.checked, actor, deviceId))
-                    }
-                    aria-label={`${u.name} can log in`}
-                  />
+    <input
+      type="checkbox"
+      className="ppl-box"
+      checked={u.can_login}
+      disabled={locked || (u.can_login && !mayRevoke)}
+      title={
+        u.can_login && !mayRevoke
+          ? u.name === actor
+            ? "You cannot revoke your own access"
+            : "Someone must be able to log in"
+          : undefined
+      }
+      onChange={(e) =>
+        run(() => db.setPersonFlag(u, "can_login", e.target.checked, actor, deviceId))
+      }
+      aria-label={`${u.name} can log in`}
+    />
 
-                  <button
-                    className="icon-btn"
-                    disabled={locked || (u.can_login && !mayRevoke)}
-                    onClick={() => askDelete(u)}
-                    aria-label={`Delete ${u.name}`}
-                  >
-                    <IcTrash className="ic sm" />
-                  </button>
-                </div>
-                <EmailRow
-                  user={u}
-                  disabled={locked}
-                  onSave={(email) => handleEmailSave(u, email)}
-                />
-              </li>
+    <button
+      className="icon-btn"
+      disabled={locked || (u.can_login && !mayRevoke)}
+      onClick={() => askDelete(u)}
+      aria-label={`Delete ${u.name}`}
+    >
+      <IcTrash className="ic sm" />
+    </button>
+  </div>
+  <EmailRow user={u} disabled={locked} onSave={(email) => handleEmailSave(u, email)} />
+</li>
 ```
 
 - [ ] **Step 2: Update the CSS for the new row structure**
@@ -1491,18 +1520,53 @@ to:
 In `src/styles.css`, change:
 
 ```css
-.ppl-row{ display:flex; align-items:center; gap:18px; padding:9px 0; border-top:1px dashed var(--line); min-height:44px; }
+.ppl-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 9px 0;
+  border-top: 1px dashed var(--line);
+  min-height: 44px;
+}
 ```
 
 to:
 
 ```css
-.ppl-row{ display:flex; flex-direction:column; gap:6px; padding:9px 0; border-top:1px dashed var(--line); }
-.ppl-row-main{ display:flex; align-items:center; gap:18px; min-height:44px; }
-.ppl-splitwise{ display:flex; align-items:center; gap:10px; }
-.ppl-email{ flex:1; font-size:13px; padding:6px 8px; }
-.ppl-linked{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--faint); white-space:nowrap; }
-.ppl-linked.on{ color:var(--marigold); }
+.ppl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 0;
+  border-top: 1px dashed var(--line);
+}
+.ppl-row-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 44px;
+}
+.ppl-splitwise {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ppl-email {
+  flex: 1;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.ppl-linked {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.ppl-linked.on {
+  color: var(--marigold);
+}
 ```
 
 - [ ] **Step 3: Typecheck**
@@ -1527,10 +1591,12 @@ git commit -m "feat: add Splitwise email linking to the People sheet"
 ## Task 9: WeekCard.tsx — push/pushed/reopen UI
 
 **Files:**
+
 - Modify: `src/components/WeekCard.tsx`
 - Modify: `src/styles.css`
 
 **Interfaces:**
+
 - Consumes: `missingSplitwiseLinks` (Task 3), `w.settlement` (Task 7).
 - Produces: `WeekCard`'s `Props` gains `onPush: () => void`. `App.tsx` (Tasks 10–11) must pass this prop everywhere `WeekCard` is rendered.
 
@@ -1624,7 +1690,7 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen, 
 Inside the component body, after `const weekOther = otherQty(w.entries);`, add:
 
 ```tsx
-  const missing = missingSplitwiseLinks(people, users);
+const missing = missingSplitwiseLinks(people, users);
 ```
 
 (This reuses the `people` variable already computed a few lines above via `perPerson(w.entries)` — it's the same per-person totals the "Per person this week" section already renders. Note this only checks the current card's own week; a sibling week in the same multi-week settlement is checked separately by the App-level pre-check before the confirm dialog opens — see Task 10.)
@@ -1632,36 +1698,40 @@ Inside the component body, after `const weekOther = otherQty(w.entries);`, add:
 Replace the paid footer:
 
 ```tsx
-      {w.paid && (
-        <div className="week-foot">
-          <span className="locked-note">
-            <IcLock className="ic sm" />
-            Locked{w.paid_at ? ` · paid ${stamp(w.paid_at)}` : ""}
-          </span>
-          <button className="link" disabled={busy} onClick={onReopen}>
-            Reopen
-          </button>
-        </div>
-      )}
+{
+  w.paid && (
+    <div className="week-foot">
+      <span className="locked-note">
+        <IcLock className="ic sm" />
+        Locked{w.paid_at ? ` · paid ${stamp(w.paid_at)}` : ""}
+      </span>
+      <button className="link" disabled={busy} onClick={onReopen}>
+        Reopen
+      </button>
+    </div>
+  );
+}
 ```
 
 with:
 
 ```tsx
-      {w.paid && (
-        <div className="week-foot">
-          <span className="locked-note">
-            <IcLock className="ic sm" />
-            Locked{w.paid_at ? ` · paid ${stamp(w.paid_at)}` : ""}
-          </span>
-          <div className="week-foot-a">
-            <SplitwiseControl settlement={w.settlement} missing={missing} busy={busy} onPush={onPush} />
-            <button className="link" disabled={busy} onClick={onReopen}>
-              Reopen
-            </button>
-          </div>
-        </div>
-      )}
+{
+  w.paid && (
+    <div className="week-foot">
+      <span className="locked-note">
+        <IcLock className="ic sm" />
+        Locked{w.paid_at ? ` · paid ${stamp(w.paid_at)}` : ""}
+      </span>
+      <div className="week-foot-a">
+        <SplitwiseControl settlement={w.settlement} missing={missing} busy={busy} onPush={onPush} />
+        <button className="link" disabled={busy} onClick={onReopen}>
+          Reopen
+        </button>
+      </div>
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 3: Add supporting CSS**
@@ -1669,10 +1739,27 @@ with:
 In `src/styles.css`, find the existing `.week-foot`/`.locked-note` rules and add nearby:
 
 ```css
-.week-foot-a{ display:flex; align-items:center; gap:14px; }
-.badge-pushed{ display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; color:var(--marigold); text-decoration:none; }
-.link.warn{ color:#b45309; }
-.link.disabled{ color:var(--faint); cursor:default; }
+.week-foot-a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.badge-pushed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--marigold);
+  text-decoration: none;
+}
+.link.warn {
+  color: #b45309;
+}
+.link.disabled {
+  color: var(--faint);
+  cursor: default;
+}
 ```
 
 (If `.week-foot`/`.locked-note` use different existing color variable names than `--marigold`/`--faint`, match whatever this file already uses for the "paid"/positive-state color — check the `.badge-paid` rule for the exact variable name in use and reuse it rather than introducing a new one.)
@@ -1694,10 +1781,12 @@ git commit -m "feat: add push/pushed/reopen Splitwise controls to WeekCard"
 ## Task 10: PushSummary component + App.tsx push flow
 
 **Files:**
+
 - Create: `src/components/PushSummary.tsx`
 - Modify: `src/App.tsx`
 
 **Interfaces:**
+
 - Consumes: `SettleSummary` (existing, unmodified), `settlementLabel`/`missingSplitwiseLinks`/`buildSplitwisePeople` (Task 3), `db.pushSettlement`/`db.createSettlement` (Tasks 5–6), `WeekCard`'s new `onPush` prop (Task 9).
 - Produces: `PushSummary` component (props: `entries: Entry[]; users: User[]; weekIds: string[]; payerOptions: User[]; defaultPayerId: string | null; onPayerChange: (id: string | null) => void`). `App.tsx` gains `handlePush(w: WeekView)`, passed as `onPush` to every `WeekCard`.
 
@@ -1781,81 +1870,82 @@ import { cap, dayLabel, money, normalizeName, round2, todayStr, weekIdOf } from 
 Add a ref near the other `useRef`/`useState` declarations in `App.tsx`:
 
 ```tsx
-  const pushPayerRef = useRef<string | null>(null);
+const pushPayerRef = useRef<string | null>(null);
 ```
 
 Add `handlePush` alongside the other `handle*` functions (e.g. after `handleMarkPaid`):
 
 ```tsx
-  function handlePush(w: WeekView) {
-    if (!user || !w.settlement) return;
-    const settlementId = w.settlement.id;
-    const weekIds = shown
-      .filter((x) => x.settlement?.id === settlementId)
-      .map((x) => x.week_start);
-    const settlementEntries = allEntries.filter((e) => weekIds.includes(e.week_start));
-    const totals = perPerson(settlementEntries);
-    const missing = missingSplitwiseLinks(totals, users);
-    if (missing.length > 0) {
-      flash(`${missing.join(", ")} ${missing.length === 1 ? "isn't" : "aren't"} linked to Splitwise yet.`);
-      return;
-    }
-
-    const people = buildSplitwisePeople(totals, users);
-    if (!people) return; // unreachable given the check above; keeps TS satisfied
-
-    const linkedPeople = users.filter((u) => u.splitwise_email);
-    const defaultPayer = linkedPeople.find((u) => u.name === user) ?? null;
-    pushPayerRef.current = defaultPayer?.id ?? null;
-
-    const totalCost = round2(settlementEntries.reduce((sum, e) => sum + e.amount, 0));
-    const description = settlementLabel(weekIds);
-    const isRetry = w.settlement.splitwise_status === "unknown";
-
-    setConfirm({
-      title: isRetry ? "Retry pushing to Splitwise?" : "Push to Splitwise?",
-      body: isRetry
-        ? "The last attempt's outcome is unknown — it may already have been created. Check Splitwise before retrying to avoid a duplicate."
-        : `Creating "${description}" for ${money(totalCost)}.`,
-      detail: (
-        <PushSummary
-          entries={settlementEntries}
-          users={users}
-          weekIds={weekIds}
-          payerOptions={linkedPeople}
-          defaultPayerId={defaultPayer?.id ?? null}
-          onPayerChange={(id) => {
-            pushPayerRef.current = id;
-          }}
-        />
-      ),
-      cta: isRetry ? "Retry push" : "Push",
-      tone: "go",
-      onYes: () => {
-        const payer = users.find((u) => u.id === pushPayerRef.current);
-        withBusy(async () => {
-          if (!payer) {
-            flash("Choose who paid first.");
-            return;
-          }
-          const result = await db.pushSettlement(
-            settlementId,
-            payer,
-            people,
-            totalCost,
-            description,
-            todayStr(),
-            user,
-            device,
-            weekIds,
-          );
-          if (result.ok) flash("Pushed to Splitwise");
-          else if (result.status === "unknown") flash("Could not confirm the push landed — check Splitwise.");
-          else flash("Splitwise push failed. Try again.");
-        });
-      },
-    });
+function handlePush(w: WeekView) {
+  if (!user || !w.settlement) return;
+  const settlementId = w.settlement.id;
+  const weekIds = shown.filter((x) => x.settlement?.id === settlementId).map((x) => x.week_start);
+  const settlementEntries = allEntries.filter((e) => weekIds.includes(e.week_start));
+  const totals = perPerson(settlementEntries);
+  const missing = missingSplitwiseLinks(totals, users);
+  if (missing.length > 0) {
+    flash(
+      `${missing.join(", ")} ${missing.length === 1 ? "isn't" : "aren't"} linked to Splitwise yet.`,
+    );
+    return;
   }
+
+  const people = buildSplitwisePeople(totals, users);
+  if (!people) return; // unreachable given the check above; keeps TS satisfied
+
+  const linkedPeople = users.filter((u) => u.splitwise_email);
+  const defaultPayer = linkedPeople.find((u) => u.name === user) ?? null;
+  pushPayerRef.current = defaultPayer?.id ?? null;
+
+  const totalCost = round2(settlementEntries.reduce((sum, e) => sum + e.amount, 0));
+  const description = settlementLabel(weekIds);
+  const isRetry = w.settlement.splitwise_status === "unknown";
+
+  setConfirm({
+    title: isRetry ? "Retry pushing to Splitwise?" : "Push to Splitwise?",
+    body: isRetry
+      ? "The last attempt's outcome is unknown — it may already have been created. Check Splitwise before retrying to avoid a duplicate."
+      : `Creating "${description}" for ${money(totalCost)}.`,
+    detail: (
+      <PushSummary
+        entries={settlementEntries}
+        users={users}
+        weekIds={weekIds}
+        payerOptions={linkedPeople}
+        defaultPayerId={defaultPayer?.id ?? null}
+        onPayerChange={(id) => {
+          pushPayerRef.current = id;
+        }}
+      />
+    ),
+    cta: isRetry ? "Retry push" : "Push",
+    tone: "go",
+    onYes: () => {
+      const payer = users.find((u) => u.id === pushPayerRef.current);
+      withBusy(async () => {
+        if (!payer) {
+          flash("Choose who paid first.");
+          return;
+        }
+        const result = await db.pushSettlement(
+          settlementId,
+          payer,
+          people,
+          totalCost,
+          description,
+          todayStr(),
+          user,
+          device,
+          weekIds,
+        );
+        if (result.ok) flash("Pushed to Splitwise");
+        else if (result.status === "unknown")
+          flash("Could not confirm the push landed — check Splitwise.");
+        else flash("Splitwise push failed. Try again.");
+      });
+    },
+  });
+}
 ```
 
 Pass `onPush={() => handlePush(w)}` to both places `WeekCard` is rendered directly in `App.tsx`'s unpaid list:
@@ -1892,11 +1982,13 @@ git commit -m "feat: wire the push-to-Splitwise confirm flow into App.tsx"
 ## Task 11: App.tsx reopen flow + PaidHistory wiring + Log display
 
 **Files:**
+
 - Modify: `src/App.tsx`
 - Modify: `src/components/PaidHistory.tsx`
 - Modify: `src/components/LogView.tsx`
 
 **Interfaces:**
+
 - Consumes: `db.reopenWeek` (Task 5), `WeekCard`'s `onPush` prop (Task 9), `handlePush` (Task 10).
 - Produces: no new exports — this finishes wiring the last two component boundaries and adds the two new log actions' display.
 
@@ -1935,16 +2027,16 @@ export function PaidHistory({
 ```
 
 ```tsx
-                  <WeekCard
-                    w={w}
-                    users={users}
-                    busy={busy}
-                    onEntry={() => {}}
-                    onDiscard={() => {}}
-                    onPay={() => {}}
-                    onPush={() => onPush(w)}
-                    onReopen={() => onReopen(w.week_start)}
-                  />
+<WeekCard
+  w={w}
+  users={users}
+  busy={busy}
+  onEntry={() => {}}
+  onDiscard={() => {}}
+  onPay={() => {}}
+  onPush={() => onPush(w)}
+  onReopen={() => onReopen(w.week_start)}
+/>
 ```
 
 - [ ] **Step 2: Replace `handleMarkPaid`'s reopen path and `handleSettleAll` in `App.tsx`**
@@ -1952,55 +2044,55 @@ export function PaidHistory({
 Replace:
 
 ```tsx
-  async function handleMarkPaid(weekId: string, paid: boolean) {
-    if (!user) return;
-    await withBusy(async () => {
-      await db.setPaid(weekId, paid, user, device);
-      flash(paid ? "Marked paid" : "Reopened");
-    });
-  }
+async function handleMarkPaid(weekId: string, paid: boolean) {
+  if (!user) return;
+  await withBusy(async () => {
+    await db.setPaid(weekId, paid, user, device);
+    flash(paid ? "Marked paid" : "Reopened");
+  });
+}
 
-  async function handleSettleAll() {
-    if (!user) return;
-    const ids = unpaid.map((w) => w.week_start);
-    await withBusy(async () => {
-      await db.settleAll(ids, user, device);
-      flash("All weeks settled");
-    });
-  }
+async function handleSettleAll() {
+  if (!user) return;
+  const ids = unpaid.map((w) => w.week_start);
+  await withBusy(async () => {
+    await db.settleAll(ids, user, device);
+    flash("All weeks settled");
+  });
+}
 ```
 
 with:
 
 ```tsx
-  async function handleMarkPaid(weekId: string) {
-    if (!user) return;
-    await withBusy(async () => {
-      await db.createSettlement([weekId], user, device);
-      flash("Marked paid");
-    });
-  }
+async function handleMarkPaid(weekId: string) {
+  if (!user) return;
+  await withBusy(async () => {
+    await db.createSettlement([weekId], user, device);
+    flash("Marked paid");
+  });
+}
 
-  async function handleReopen(w: WeekView) {
-    if (!user) return;
-    await withBusy(async () => {
-      try {
-        await db.reopenWeek(w, user, device);
-        flash("Reopened");
-      } catch (e) {
-        flash(e instanceof Error ? e.message : "Could not reopen.");
-      }
-    });
-  }
+async function handleReopen(w: WeekView) {
+  if (!user) return;
+  await withBusy(async () => {
+    try {
+      await db.reopenWeek(w, user, device);
+      flash("Reopened");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "Could not reopen.");
+    }
+  });
+}
 
-  async function handleSettleAll() {
-    if (!user) return;
-    const ids = unpaid.map((w) => w.week_start);
-    await withBusy(async () => {
-      await db.createSettlement(ids, user, device);
-      flash("All weeks settled");
-    });
-  }
+async function handleSettleAll() {
+  if (!user) return;
+  const ids = unpaid.map((w) => w.week_start);
+  await withBusy(async () => {
+    await db.createSettlement(ids, user, device);
+    flash("All weeks settled");
+  });
+}
 ```
 
 Update the one call site that used the two-argument form — the unpaid `WeekCard`'s `onPay`:
@@ -2031,24 +2123,24 @@ Change `onYes: () => handleMarkPaid(w.week_start, true)` to `onYes: () => handle
 Replace the unpaid-list `WeekCard`'s `onReopen={() => {}}` with a real handler that opens a confirm dialog. First add a helper function alongside `handlePush`:
 
 ```tsx
-  function confirmReopen(w: WeekView) {
-    const settlement = w.settlement;
-    const siblingWeeks = settlement ? shown.filter((x) => x.settlement?.id === settlement.id) : [w];
-    const pushed = !!settlement?.splitwise_expense_id;
-    const parts = [
-      siblingWeeks.length > 1
-        ? `This will reopen all ${siblingWeeks.length} weeks settled together with it.`
-        : "It will go back to unpaid so entries can be edited.",
-    ];
-    if (pushed) parts.push("It will also be removed from Splitwise first.");
-    setConfirm({
-      title: "Reopen this week?",
-      body: parts.join(" "),
-      cta: "Reopen",
-      tone: "plain",
-      onYes: () => handleReopen(w),
-    });
-  }
+function confirmReopen(w: WeekView) {
+  const settlement = w.settlement;
+  const siblingWeeks = settlement ? shown.filter((x) => x.settlement?.id === settlement.id) : [w];
+  const pushed = !!settlement?.splitwise_expense_id;
+  const parts = [
+    siblingWeeks.length > 1
+      ? `This will reopen all ${siblingWeeks.length} weeks settled together with it.`
+      : "It will go back to unpaid so entries can be edited.",
+  ];
+  if (pushed) parts.push("It will also be removed from Splitwise first.");
+  setConfirm({
+    title: "Reopen this week?",
+    body: parts.join(" "),
+    cta: "Reopen",
+    tone: "plain",
+    onYes: () => handleReopen(w),
+  });
+}
 ```
 
 Change the unpaid `WeekCard`'s `onReopen={() => {}}` to `onReopen={() => confirmReopen(w)}` (a paid week never actually appears in the unpaid list, so this is defensive rather than reachable — matches the existing no-op it replaces).
@@ -2113,6 +2205,7 @@ Expected: PASS — all existing tests plus the new ones from Task 3.
 - [ ] **Step 8: Manually verify the full flow in the browser**
 
 Run: `npm run dev`. With the test Splitwise group set up (Task 4) and at least one person linked (Task 8):
+
 1. Add an entry, mark its week paid, open History, click "Push to Splitwise" — confirm the dialog shows the right breakdown and payer picker, confirm it, and check the expense actually appears in the test Splitwise group with the right description/date/currency/shares.
 2. Click the resulting "Pushed" badge — confirm it opens the right expense on splitwise.com.
 3. Click "Reopen" on that now-pushed week — confirm the expense disappears from the test group and the week becomes editable/unpaid again in the app.
@@ -2131,9 +2224,11 @@ git commit -m "feat: wire settlement-aware reopen and Splitwise log entries"
 ## Task 12: CI/deploy — deploy the function to production
 
 **Files:**
+
 - Modify: `.github/workflows/deploy.yml`
 
 **Interfaces:**
+
 - Consumes: nothing new — this only changes CI configuration.
 - Produces: production deploys now also push the `splitwise` edge function.
 
@@ -2142,14 +2237,14 @@ git commit -m "feat: wire settlement-aware reopen and Splitwise log entries"
 In `.github/workflows/deploy.yml`, in the `supabase-deploy` job, add a step right after the existing `Deploy edge functions` step:
 
 ```yaml
-      - name: Deploy edge functions
-        # --use-api bundles server-side instead of via Docker — faster, and
-        # removes a Docker dependency from CI. Idempotent redeploy either way.
-        if: steps.check.outputs.ready == 'true'
-        run: supabase functions deploy validate-access --use-api --yes
-      - name: Deploy Splitwise function
-        if: steps.check.outputs.ready == 'true'
-        run: supabase functions deploy splitwise --use-api --yes
+- name: Deploy edge functions
+  # --use-api bundles server-side instead of via Docker — faster, and
+  # removes a Docker dependency from CI. Idempotent redeploy either way.
+  if: steps.check.outputs.ready == 'true'
+  run: supabase functions deploy validate-access --use-api --yes
+- name: Deploy Splitwise function
+  if: steps.check.outputs.ready == 'true'
+  run: supabase functions deploy splitwise --use-api --yes
 ```
 
 - [ ] **Step 2: Confirm production secrets are set**

@@ -1,10 +1,12 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
-import type { Entry } from "./types";
+import type { Entry, WeekView } from "./types";
 import type { ShareInput } from "./lib/split";
 import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
 import { asAdd, describeAdd, describeEdit } from "./lib/logtext";
-import { cap, dayLabel, money, normalizeName, todayStr, weekIdOf } from "./lib/util";
+import { cap, dayLabel, money, normalizeName, round2, todayStr, weekIdOf } from "./lib/util";
+import { buildSplitwisePeople, missingSplitwiseLinks, settlementLabel } from "./lib/splitwise";
+import { perPerson } from "./lib/aggregate";
 import { useAuth } from "./hooks/useAuth";
 import { useKhataData } from "./hooks/useKhataData";
 import { useToast } from "./hooks/useToast";
@@ -23,6 +25,7 @@ import { LogView } from "./components/LogView";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { StatsSheet } from "./components/StatsSheet";
 import { SettleSummary } from "./components/SettleSummary";
+import { PushSummary } from "./components/PushSummary";
 import { PeopleSheet } from "./components/PeopleSheet";
 import { Toast } from "./components/Toast";
 import { Roti } from "./components/icons";
@@ -64,6 +67,7 @@ export default function App() {
   const [showStats, setShowStats] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
   const busyRef = useRef(false);
+  const pushPayerRef = useRef<string | null>(null);
 
   const device = useMemo(() => getDeviceId(), []);
 
@@ -134,6 +138,77 @@ export default function App() {
     await withBusy(async () => {
       await db.setPaid(weekId, paid, user, device);
       flash(paid ? "Marked paid" : "Reopened");
+    });
+  }
+
+  function handlePush(w: WeekView) {
+    if (!user || !w.settlement) return;
+    const settlementId = w.settlement.id;
+    const weekIds = shown.filter((x) => x.settlement?.id === settlementId).map((x) => x.week_start);
+    const settlementEntries = allEntries.filter((e) => weekIds.includes(e.week_start));
+    const totals = perPerson(settlementEntries);
+    const missing = missingSplitwiseLinks(totals, users);
+    if (missing.length > 0) {
+      flash(
+        `${missing.join(", ")} ${missing.length === 1 ? "isn't" : "aren't"} linked to Splitwise yet.`,
+      );
+      return;
+    }
+
+    const people = buildSplitwisePeople(totals, users);
+    if (!people) return; // unreachable given the check above; keeps TS satisfied
+
+    const linkedPeople = users.filter((u) => u.splitwise_email);
+    const defaultPayer = linkedPeople.find((u) => u.name === user) ?? null;
+    pushPayerRef.current = defaultPayer?.id ?? null;
+
+    const totalCost = round2(settlementEntries.reduce((sum, e) => sum + e.amount, 0));
+    const description = settlementLabel(weekIds);
+    const isRetry = w.settlement.splitwise_status === "unknown";
+
+    setConfirm({
+      title: isRetry ? "Retry pushing to Splitwise?" : "Push to Splitwise?",
+      body: isRetry
+        ? "The last attempt's outcome is unknown — it may already have been created. Check Splitwise before retrying to avoid a duplicate."
+        : `Creating "${description}" for ${money(totalCost)}.`,
+      detail: (
+        <PushSummary
+          entries={settlementEntries}
+          users={users}
+          weekIds={weekIds}
+          payerOptions={linkedPeople}
+          defaultPayerId={defaultPayer?.id ?? null}
+          onPayerChange={(id) => {
+            pushPayerRef.current = id;
+          }}
+        />
+      ),
+      cta: isRetry ? "Retry push" : "Push",
+      tone: "go",
+      onYes: () => {
+        const payer = users.find((u) => u.id === pushPayerRef.current);
+        withBusy(async () => {
+          if (!payer) {
+            flash("Choose who paid first.");
+            return;
+          }
+          const result = await db.pushSettlement(
+            settlementId,
+            payer,
+            people,
+            totalCost,
+            description,
+            todayStr(),
+            user,
+            device,
+            weekIds,
+          );
+          if (result.ok) flash("Pushed to Splitwise");
+          else if (result.status === "unknown")
+            flash("Could not confirm the push landed — check Splitwise.");
+          else flash("Splitwise push failed. Try again.");
+        });
+      },
     });
   }
 
@@ -311,6 +386,7 @@ export default function App() {
                             onYes: () => handleMarkPaid(w.week_start, true),
                           })
                         }
+                        onPush={() => handlePush(w)}
                         onReopen={() => {}}
                       />
                     </Fragment>

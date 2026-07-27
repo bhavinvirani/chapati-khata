@@ -403,7 +403,7 @@ export default function App() {
 
             <AddForm entries={entries} weeks={weeks} users={users} busy={busy} onAdd={handleAdd} />
 
-            {shown.length === 0 ? (
+            {shown.length === 0 && paidCount === 0 ? (
               <div className="empty">
                 <Roti size={40} />
                 <p>No records yet.</p>

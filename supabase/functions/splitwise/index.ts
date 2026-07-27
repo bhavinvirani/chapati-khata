@@ -103,6 +103,12 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
   const totalCost = typeof body.totalCost === "number" ? body.totalCost : NaN;
   const description = typeof body.description === "string" ? body.description : "";
   const date = typeof body.date === "string" ? body.date : "";
+  // Sent live by the client from src/config.ts (§10) rather than hardcoded
+  // here — these fallbacks are defensive only, since the client always sends
+  // both correctly.
+  const currency = typeof body.currency === "string" && body.currency ? body.currency : "CAD";
+  const categoryName =
+    typeof body.categoryName === "string" && body.categoryName ? body.categoryName : "Groceries";
 
   if (!payerEmail || people.length === 0 || !Number.isFinite(totalCost) || !description || !date) {
     return Response.json({ ok: false, error: "bad_request" });
@@ -142,14 +148,16 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
     resolved.push({ name: "payer", email: payerEmail, qty: 0, amount: 0, splitwiseId: payerId });
   }
 
-  // Mirrors src/config.ts's SPLITWISE_CATEGORY_NAME — Deno can't import from
-  // src/config (same hand-duplication reason as normalizeEmail above). Keep
-  // the two in step by hand.
+  // A transient categories-endpoint hiccup shouldn't block an otherwise-
+  // successful expense creation — category_id is already optional below, so
+  // treat a resolution failure as "no category" rather than aborting the
+  // push (unlike `groupMembers` above, which genuinely can't proceed without
+  // member data).
   let categoryId: number | null;
   try {
-    categoryId = await resolveCategoryId(apiKey, "Groceries");
+    categoryId = await resolveCategoryId(apiKey, categoryName);
   } catch {
-    return Response.json({ ok: false, error: "network" });
+    categoryId = null;
   }
 
   const params: Record<string, string> = {
@@ -157,9 +165,7 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
     group_id: groupId,
     description,
     date,
-    // Mirrors src/config.ts's SPLITWISE_CURRENCY — same hand-duplication
-    // reason as normalizeEmail above. Keep the two in step by hand.
-    currency_code: "CAD",
+    currency_code: currency,
   };
   if (categoryId !== null) params.category_id = String(categoryId);
   resolved.forEach((p, i) => {

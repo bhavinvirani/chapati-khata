@@ -32,6 +32,31 @@ import { Roti } from "./components/icons";
 
 const ENTRY_CODE = import.meta.env.VITE_ENTRY_CODE;
 
+/**
+ * Turn a failed push's `error`/`detail` into a message naming exactly who
+ * failed and why (design §13), instead of one generic string covering
+ * "someone left the group," "Splitwise rejected the request," "the app
+ * isn't configured yet," and a genuine network blip alike.
+ */
+function pushErrorMessage(result: { error?: string; detail?: string }): string {
+  switch (result.error) {
+    case "not_linked":
+      return result.detail
+        ? `${result.detail} not linked to Splitwise.`
+        : "Someone isn't linked to Splitwise.";
+    case "already_pushed":
+      return "Someone else already pushed this — check Splitwise before retrying.";
+    case "amount_mismatch":
+      return "The amounts didn't add up — nothing was pushed. Try again.";
+    case "config":
+      return "Splitwise isn't configured yet.";
+    case "splitwise":
+      return "Splitwise rejected the request. Check the amounts and try again.";
+    default:
+      return "Splitwise push failed. Try again.";
+  }
+}
+
 export default function App() {
   const { user, signIn, signOut, restoreUser } = useAuth();
   const {
@@ -218,7 +243,7 @@ export default function App() {
           if (result.ok) flash("Pushed to Splitwise");
           else if (result.status === "unknown")
             flash("Could not confirm the push landed — check Splitwise.");
-          else flash("Splitwise push failed. Try again.");
+          else flash(pushErrorMessage(result));
         });
       },
     });
@@ -228,12 +253,17 @@ export default function App() {
     const settlement = w.settlement;
     const siblingWeeks = settlement ? shown.filter((x) => x.settlement?.id === settlement.id) : [w];
     const pushed = !!settlement?.splitwise_expense_id;
+    const uncertain = settlement?.splitwise_status === "unknown";
     const parts = [
       siblingWeeks.length > 1
         ? `This will reopen all ${siblingWeeks.length} weeks settled together with it.`
         : "It will go back to unpaid so entries can be edited.",
     ];
     if (pushed) parts.push("It will also be removed from Splitwise first.");
+    else if (uncertain)
+      parts.push(
+        "The last push attempt's outcome was never confirmed — check Splitwise for a possible existing expense before reopening, since reopening will not be able to find or remove it afterward.",
+      );
     setConfirm({
       title: "Reopen this week?",
       body: parts.join(" "),

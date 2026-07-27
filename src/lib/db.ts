@@ -4,6 +4,7 @@ import type { ShareInput } from "./split";
 import type { SplitwisePerson } from "./splitwise";
 import type { Entry, LogAction, LogRow, Settlement, User, Week } from "../types";
 import { cap, money, normalizeName } from "./util";
+import { SPLITWISE_CATEGORY_NAME, SPLITWISE_CURRENCY } from "../config";
 
 // This module owns every read/write. The rest of the app never talks to
 // Supabase directly — swap this one file to change backends.
@@ -375,6 +376,13 @@ export async function reopenWeek(week: Week, actor: string, deviceId: string): P
   if (weeksErr) fail("reopenWeek/lookup", weeksErr);
   const weekIds = (weekRows as { week_start: string }[]).map((w) => w.week_start);
 
+  // Someone else already reopened this settlement's weeks (a genuine race
+  // between two devices reopening the same multi-week settlement) — nothing
+  // left to clear, and an empty `.in()` list is invalid PostgREST (see
+  // `editEntry`'s own comment about exactly this hazard). Nothing new
+  // happened on this device, so nothing to log either.
+  if (weekIds.length === 0) return;
+
   const { error: upErr } = await supabase
     .from("weeks")
     .update({ paid: false, paid_at: null, settlement_id: null })
@@ -464,8 +472,11 @@ export async function checkSplitwiseLink(
     body: { action: "link", email },
   });
   if (error) fail("checkSplitwiseLink", error);
-  const result = data as { linked: boolean; splitwise_user_id?: string };
-  return { linked: result.linked, splitwiseUserId: result.splitwise_user_id ?? null };
+  const result = data as { linked?: boolean; splitwise_user_id?: string };
+  // The edge function call can fail open into an unexpected shape (e.g. a
+  // `config` error response with no `linked` field at all) — normalize so
+  // callers always get a real boolean, never `undefined` masquerading as one.
+  return { linked: result.linked === true, splitwiseUserId: result.splitwise_user_id ?? null };
 }
 
 /**
@@ -496,7 +507,8 @@ export async function deleteSplitwiseExpense(
 }
 
 export type PushResult =
-  { ok: true; expenseId: string } | { ok: false; status?: "unknown"; error?: string };
+  | { ok: true; expenseId: string }
+  | { ok: false; status?: "unknown"; error?: string; detail?: string };
 
 /**
  * Push a settlement to Splitwise. On an ambiguous outcome (network error,
@@ -520,7 +532,7 @@ export async function pushSettlement(
   }
 
   let invokeFailed = false;
-  let data: { ok: boolean; expense_id?: string; error?: string } | undefined;
+  let data: { ok: boolean; expense_id?: string; error?: string; detail?: string } | undefined;
   try {
     const res = await supabase.functions.invoke("splitwise", {
       body: {
@@ -530,10 +542,12 @@ export async function pushSettlement(
         totalCost,
         description,
         date,
+        currency: SPLITWISE_CURRENCY,
+        categoryName: SPLITWISE_CATEGORY_NAME,
       },
     });
     if (res.error) invokeFailed = true;
-    else data = res.data as { ok: boolean; expense_id?: string; error?: string };
+    else data = res.data as { ok: boolean; expense_id?: string; error?: string; detail?: string };
   } catch {
     invokeFailed = true;
   }
@@ -548,10 +562,16 @@ export async function pushSettlement(
   }
 
   if (!data.ok || !data.expense_id) {
-    return { ok: false, error: data.error ?? "unknown_error" };
+    return { ok: false, error: data.error ?? "unknown_error", detail: data.detail };
   }
 
-  const { error } = await supabase
+  // Conditioned on `splitwise_expense_id` still being null: if two devices
+  // push the same settlement concurrently, both calls above can succeed at
+  // Splitwise (two real expenses created), and without this guard whichever
+  // write lands second would silently overwrite the first's expense id,
+  // losing all record of it. With the guard, the loser detects the race
+  // instead (see `already_pushed` below) rather than clobbering the winner.
+  const { data: updated, error } = await supabase
     .from("settlements")
     .update({
       splitwise_expense_id: data.expense_id,
@@ -559,8 +579,19 @@ export async function pushSettlement(
       splitwise_pushed_at: new Date().toISOString(),
       splitwise_status: null,
     })
-    .eq("id", settlementId);
+    .eq("id", settlementId)
+    .is("splitwise_expense_id", null)
+    .select("id")
+    .maybeSingle();
   if (error) fail("pushSettlement/save", error);
+  if (!updated) {
+    // Someone else already recorded a push for this settlement while our own
+    // Splitwise call was in flight. Our call may have just created a genuine
+    // duplicate expense there — surface this distinctly so the UI can tell
+    // the user to check Splitwise, rather than treating it as an ordinary
+    // success or a generic failure.
+    return { ok: false, error: "already_pushed" };
+  }
 
   for (const weekId of weekIds) {
     await logAction({

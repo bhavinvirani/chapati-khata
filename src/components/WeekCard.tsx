@@ -1,55 +1,10 @@
 import { useState } from "react";
-import type { Entry, Settlement, User, WeekView } from "../types";
+import type { Entry, User, WeekView } from "../types";
 import { groupByDay, nameOf, needsRepair, otherQty, perPerson } from "../lib/aggregate";
 import { missingSplitwiseLinks } from "../lib/splitwise";
 import { cap, dayLabel, isCurrentWeek, money, stamp, weekLabel } from "../lib/util";
 import { IcCheck, IcLock, IcPencil } from "./icons";
-
-function SplitwiseControl({
-  settlement,
-  missing,
-  busy,
-  onPush,
-}: {
-  settlement: Settlement | null;
-  missing: string[];
-  busy: boolean;
-  onPush: () => void;
-}) {
-  if (!settlement) return null;
-  if (settlement.splitwise_expense_id) {
-    return (
-      <a
-        className="badge-pushed"
-        href={`https://secure.splitwise.com/expenses/${settlement.splitwise_expense_id}`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        <IcCheck className="ic sm" />
-        Pushed
-      </a>
-    );
-  }
-  if (settlement.splitwise_status === "unknown") {
-    return (
-      <button className="link warn" disabled={busy} onClick={onPush}>
-        Push status unknown — retry?
-      </button>
-    );
-  }
-  if (missing.length > 0) {
-    return (
-      <span className="link disabled" title={`${missing.join(", ")} not linked to Splitwise`}>
-        {missing[0]} not linked
-      </span>
-    );
-  }
-  return (
-    <button className="link" disabled={busy} onClick={onPush}>
-      Push to Splitwise
-    </button>
-  );
-}
+import { SplitwiseControl } from "./SplitwiseControl";
 
 interface Props {
   w: WeekView;
@@ -60,11 +15,25 @@ interface Props {
   onPay: () => void;
   onReopen: () => void;
   onPush: () => void;
+  /** False when this card is rendered inside a multi-week settlement group
+   * (PaidHistory), which shows one shared Push/Pushed/Reopen control for the
+   * whole group instead of duplicating it on every member card. */
+  showActions?: boolean;
 }
 
 const CURRENT_YEAR = String(new Date().getFullYear());
 
-export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen, onPush }: Props) {
+export function WeekCard({
+  w,
+  users,
+  busy,
+  onEntry,
+  onDiscard,
+  onPay,
+  onReopen,
+  onPush,
+  showActions = true,
+}: Props) {
   const [openAdd, setOpenAdd] = useState<string | null>(null);
   const [openDay, setOpenDay] = useState<string | null>(null);
   const days = groupByDay(w.entries);
@@ -237,17 +206,19 @@ export function WeekCard({ w, users, busy, onEntry, onDiscard, onPay, onReopen, 
             <IcLock className="ic sm" />
             Locked{w.paid_at ? ` · paid ${stamp(w.paid_at)}` : ""}
           </span>
-          <div className="week-foot-a">
-            <SplitwiseControl
-              settlement={w.settlement}
-              missing={missing}
-              busy={busy}
-              onPush={onPush}
-            />
-            <button className="link" disabled={busy} onClick={onReopen}>
-              Reopen
-            </button>
-          </div>
+          {showActions && (
+            <div className="week-foot-a">
+              <SplitwiseControl
+                settlement={w.settlement}
+                missing={missing}
+                busy={busy}
+                onPush={onPush}
+              />
+              <button className="link" disabled={busy} onClick={onReopen}>
+                Reopen
+              </button>
+            </div>
+          )}
         </div>
       )}
     </section>

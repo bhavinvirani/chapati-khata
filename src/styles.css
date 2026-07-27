@@ -128,6 +128,15 @@ html, body, #root{ min-height:100%; }
 .history-weeks{ display:flex; flex-direction:column; gap:14px; margin-top:14px; }
 .history-loading{ text-align:center; padding:20px; color:var(--soft); font-size:13.5px; }
 
+/* Weeks settled together share one Splitwise expense, so they share one set
+   of push/reopen controls too — duplicating the same button on every member
+   card was what made a single click look like it was silently affecting
+   cards the user never touched. */
+.settlement-group{ border:1.4px dashed var(--line); border-radius:18px; padding:10px; display:flex; flex-direction:column; gap:10px; }
+.settlement-group-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:2px 6px; flex-wrap:wrap; row-gap:8px; }
+.settlement-group-label{ font-size:12.5px; font-weight:700; color:var(--soft); }
+.settlement-group-a{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-left:auto; }
+
 .year-sep{ display:flex; align-items:center; gap:12px; color:var(--faint); font-family:var(--disp); font-weight:700; font-size:13px; letter-spacing:.04em; padding:2px 0; }
 .year-sep::before,.year-sep::after{ content:""; flex:1; border-top:1px dashed var(--line); }
 
@@ -167,6 +176,8 @@ html, body, #root{ min-height:100%; }
 .dlg-b{ font-size:14px; color:var(--soft); line-height:1.5; margin-bottom:20px; }
 .dlg-a{ display:flex; gap:10px; }
 .dlg-a .btn{ flex:1; }
+.push-summary{ margin-bottom:18px; }
+.push-summary select.in{ margin-bottom:2px; }
 
 /* Cap and scroll. The overlay pins sheets to the bottom, so one taller than
    the screen loses its top edge — with eight people in a split that meant the
@@ -280,8 +291,9 @@ html, body, #root{ min-height:100%; }
 .ppl-row-main{ display:flex; align-items:center; gap:18px; min-height:44px; }
 .ppl-splitwise{ display:flex; align-items:center; gap:10px; }
 .ppl-email{ flex:1; }
-.ppl-linked{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--faint); white-space:nowrap; }
+.ppl-linked{ display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--faint); white-space:nowrap; }
 .ppl-linked.on{ color:var(--marigold); }
+.ppl-linked.checking{ color:var(--soft); }
 .ppl-name{ flex:1; font-size:15px; }
 .ppl-box{ width:20px; height:20px; accent-color:var(--marigold); flex-shrink:0; }
 .ppl-box:disabled{ opacity:.4; }

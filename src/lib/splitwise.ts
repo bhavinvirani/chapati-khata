@@ -6,14 +6,19 @@ import { cap, dateRangeLabel, parseYMD } from "./util";
 // mapping this app's per-person totals into the edge function's request
 // shape, and spotting who isn't linked yet. No I/O, no React.
 
-/** "Roti Jul 6 – 19" (or crossing months/years) across every week id given. */
-export function settlementLabel(weekIds: string[]): string {
+/** "Jul 6 – 19" (or crossing months/years) across every week id given, with no "Roti" prefix — for UI display rather than the Splitwise expense description. */
+export function settlementDateRange(weekIds: string[]): string {
   const sorted = [...weekIds].sort();
   const first = parseYMD(sorted[0]);
   const last = parseYMD(sorted[sorted.length - 1]);
   last.setDate(last.getDate() + 6); // that week's Sunday
   const withYear = first.getFullYear() !== last.getFullYear();
-  return `Roti ${dateRangeLabel(first, last, withYear)}`;
+  return dateRangeLabel(first, last, withYear);
+}
+
+/** "Roti Jul 6 – 19" (or crossing months/years) across every week id given. */
+export function settlementLabel(weekIds: string[]): string {
+  return `Roti ${settlementDateRange(weekIds)}`;
 }
 
 /** Canonical form for comparing Splitwise emails. */

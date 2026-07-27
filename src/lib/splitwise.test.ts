@@ -5,6 +5,7 @@ import {
   buildSplitwisePeople,
   missingSplitwiseLinks,
   normalizeEmail,
+  settlementDateRange,
   settlementLabel,
 } from "./splitwise";
 
@@ -36,6 +37,16 @@ describe("settlementLabel", () => {
 
   it("shows the year only when the span crosses one", () => {
     expect(settlementLabel(["2025-12-29", "2026-01-05"])).toBe("Roti Dec 29, 2025 – Jan 11, 2026");
+  });
+});
+
+describe("settlementDateRange", () => {
+  it("has no 'Roti' prefix, unlike settlementLabel", () => {
+    expect(settlementDateRange(["2026-07-06"])).toBe("Jul 6 – 12");
+  });
+
+  it("spans from the earliest week's Monday to the latest week's Sunday", () => {
+    expect(settlementDateRange(["2026-07-13", "2026-07-06"])).toBe("Jul 6 – 19");
   });
 });
 

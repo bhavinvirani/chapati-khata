@@ -3,7 +3,7 @@ import type { User } from "../types";
 import { canDeletePerson, canRevokeLogin, sortPeople } from "../lib/people";
 import * as db from "../lib/db";
 import { cap, normalizeName } from "../lib/util";
-import { IcTrash, IcX } from "./icons";
+import { IcRefresh, IcTrash, IcX } from "./icons";
 
 interface Props {
   users: User[];
@@ -22,9 +22,10 @@ function EmailRow({
 }: {
   user: User;
   disabled: boolean;
-  onSave: (email: string) => void;
+  onSave: (email: string) => Promise<void>;
 }) {
   const [value, setValue] = useState(user.splitwise_email ?? "");
+  const [checking, setChecking] = useState(false);
   const linked = !!user.splitwise_user_id;
   return (
     <div className="ppl-splitwise">
@@ -32,19 +33,32 @@ function EmailRow({
         className="in ppl-email"
         placeholder="Splitwise email"
         value={value}
-        disabled={disabled}
+        disabled={disabled || checking}
         autoComplete="off"
         onChange={(e) => setValue(e.target.value)}
-        onBlur={() => {
+        onBlur={async () => {
           const clean = value.trim();
-          if (clean !== (user.splitwise_email ?? "")) onSave(clean);
+          if (clean === (user.splitwise_email ?? "")) return;
+          setChecking(true);
+          try {
+            await onSave(clean);
+          } finally {
+            setChecking(false);
+          }
         }}
         aria-label={`${user.name}'s Splitwise email`}
       />
-      {value && (
-        <span className={"ppl-linked" + (linked ? " on" : "")}>
-          {linked ? "Linked" : "Not linked"}
+      {checking ? (
+        <span className="ppl-linked checking">
+          <IcRefresh className="ic sm spin" />
+          Checking&hellip;
         </span>
+      ) : (
+        value && (
+          <span className={"ppl-linked" + (linked ? " on" : "")}>
+            {linked ? "Linked" : "Not linked"}
+          </span>
+        )
       )}
     </div>
   );

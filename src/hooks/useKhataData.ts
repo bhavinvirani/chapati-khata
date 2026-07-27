@@ -71,12 +71,26 @@ export function useKhataData(onBooted: () => void | Promise<void>) {
   // realtime + refresh on focus
   useEffect(() => {
     if (!ready) return;
-    const unsub = db.subscribeChanges(() => load());
+    // One write can touch several tables (e.g. reopening a multi-week
+    // settlement updates weeks and inserts several log rows), and Supabase
+    // fires a separate realtime event per row changed. Without coalescing,
+    // each of those independently triggers a full reload, and overlapping
+    // in-flight loads can resolve out of order — the symptom is a
+    // momentarily inconsistent snapshot (e.g. a duplicate React key from a
+    // stale entries array briefly mixed with fresh rows), not a real data
+    // loss, but worth avoiding rather than living with the flicker.
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedLoad = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(load, 250);
+    };
+    const unsub = db.subscribeChanges(debouncedLoad);
     const onVis = () => {
       if (document.visibilityState === "visible") load();
     };
     document.addEventListener("visibilitychange", onVis);
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       unsub();
       document.removeEventListener("visibilitychange", onVis);
     };

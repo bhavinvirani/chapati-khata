@@ -5,7 +5,12 @@ import * as db from "./lib/db";
 import { getDeviceId } from "./lib/device";
 import { asAdd, describeAdd, describeEdit } from "./lib/logtext";
 import { cap, dayLabel, money, normalizeName, round2, todayStr, weekIdOf } from "./lib/util";
-import { buildSplitwisePeople, missingSplitwiseLinks, settlementLabel } from "./lib/splitwise";
+import {
+  buildSplitwisePeople,
+  missingSplitwiseLinks,
+  settlementDateRange,
+  settlementLabel,
+} from "./lib/splitwise";
 import { perPerson } from "./lib/aggregate";
 import { useAuth } from "./hooks/useAuth";
 import { useKhataData } from "./hooks/useKhataData";
@@ -256,7 +261,7 @@ export default function App() {
     const uncertain = settlement?.splitwise_status === "unknown";
     const parts = [
       siblingWeeks.length > 1
-        ? `This will reopen all ${siblingWeeks.length} weeks settled together with it.`
+        ? `This will reopen every week settled together with it (${settlementDateRange(siblingWeeks.map((x) => x.week_start))}).`
         : "It will go back to unpaid so entries can be edited.",
     ];
     if (pushed) parts.push("It will also be removed from Splitwise first.");

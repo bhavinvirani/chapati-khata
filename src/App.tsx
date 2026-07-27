@@ -133,11 +133,23 @@ export default function App() {
     });
   }
 
-  async function handleMarkPaid(weekId: string, paid: boolean) {
+  async function handleMarkPaid(weekId: string) {
     if (!user) return;
     await withBusy(async () => {
-      await db.setPaid(weekId, paid, user, device);
-      flash(paid ? "Marked paid" : "Reopened");
+      await db.createSettlement([weekId], user, device);
+      flash("Marked paid");
+    });
+  }
+
+  async function handleReopen(w: WeekView) {
+    if (!user) return;
+    await withBusy(async () => {
+      try {
+        await db.reopenWeek(w, user, device);
+        flash("Reopened");
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "Could not reopen.");
+      }
     });
   }
 
@@ -212,11 +224,30 @@ export default function App() {
     });
   }
 
+  function confirmReopen(w: WeekView) {
+    const settlement = w.settlement;
+    const siblingWeeks = settlement ? shown.filter((x) => x.settlement?.id === settlement.id) : [w];
+    const pushed = !!settlement?.splitwise_expense_id;
+    const parts = [
+      siblingWeeks.length > 1
+        ? `This will reopen all ${siblingWeeks.length} weeks settled together with it.`
+        : "It will go back to unpaid so entries can be edited.",
+    ];
+    if (pushed) parts.push("It will also be removed from Splitwise first.");
+    setConfirm({
+      title: "Reopen this week?",
+      body: parts.join(" "),
+      cta: "Reopen",
+      tone: "plain",
+      onYes: () => handleReopen(w),
+    });
+  }
+
   async function handleSettleAll() {
     if (!user) return;
     const ids = unpaid.map((w) => w.week_start);
     await withBusy(async () => {
-      await db.settleAll(ids, user, device);
+      await db.createSettlement(ids, user, device);
       flash("All weeks settled");
     });
   }
@@ -383,11 +414,11 @@ export default function App() {
                             ),
                             cta: "Mark paid",
                             tone: "go",
-                            onYes: () => handleMarkPaid(w.week_start, true),
+                            onYes: () => handleMarkPaid(w.week_start),
                           })
                         }
                         onPush={() => handlePush(w)}
-                        onReopen={() => {}}
+                        onReopen={() => confirmReopen(w)}
                       />
                     </Fragment>
                   );
@@ -407,15 +438,11 @@ export default function App() {
                     // export), so this call site owns its own catch.
                     loadHistory().catch(() => {});
                   }}
-                  onReopen={(weekId) =>
-                    setConfirm({
-                      title: "Reopen this week?",
-                      body: "It will go back to unpaid so entries can be edited. It re-joins your total.",
-                      cta: "Reopen",
-                      tone: "plain",
-                      onYes: () => handleMarkPaid(weekId, false),
-                    })
-                  }
+                  onReopen={(weekId) => {
+                    const w = paid.find((x) => x.week_start === weekId);
+                    if (w) confirmReopen(w);
+                  }}
+                  onPush={(w) => handlePush(w)}
                 />
               </>
             )}

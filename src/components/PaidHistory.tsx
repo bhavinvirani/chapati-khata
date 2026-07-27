@@ -11,6 +11,7 @@ interface Props {
   busy: boolean;
   onExpand: () => void;
   onReopen: (weekId: string) => void;
+  onPush: (w: WeekView) => void;
 }
 
 export function PaidHistory({
@@ -22,6 +23,7 @@ export function PaidHistory({
   busy,
   onExpand,
   onReopen,
+  onPush,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -61,6 +63,7 @@ export function PaidHistory({
                     onEntry={() => {}}
                     onDiscard={() => {}}
                     onPay={() => {}}
+                    onPush={() => onPush(w)}
                     onReopen={() => onReopen(w.week_start)}
                   />
                 </Fragment>

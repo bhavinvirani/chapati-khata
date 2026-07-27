@@ -21,6 +21,10 @@ function logText(ev: LogRow): string {
       return `marked ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"} paid`;
     case "reopen":
       return `reopened ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"}`;
+    case "splitwise_push":
+      return `pushed ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"} to Splitwise`;
+    case "splitwise_unpush":
+      return `removed ${ev.week_start ? weekLabel(ev.week_start, true) : "a week"} from Splitwise`;
     case "login":
       return "signed in";
     case "user_add":
@@ -71,6 +75,8 @@ const KIND: Record<string, string> = {
   delete: "c-del",
   paid: "c-paid",
   reopen: "c-open",
+  splitwise_push: "c-paid",
+  splitwise_unpush: "c-open",
   login: "c-login",
   user_add: "c-people",
   user_delete: "c-del",

@@ -121,6 +121,20 @@ grant select, insert, update, delete on public.weeks, public.entries, public.log
 grant usage on schema public to service_role;
 grant select on public.users to service_role;
 
+-- ── Rate limiting: backing table for validate-access and splitwise's
+-- throttling, since a stateless edge function has nowhere else to remember
+-- attempts between requests. Accessed only via the service-role key — no
+-- policy grants authenticated/anon access, on purpose. ──
+create table if not exists public.rate_limit_attempts (
+  id         uuid primary key default gen_random_uuid(),
+  bucket     text not null,        -- which check this belongs to, e.g. 'validate-access'
+  key        text not null,        -- what's being limited, e.g. the caller's IP
+  created_at timestamptz not null default now()
+);
+create index if not exists rate_limit_attempts_lookup_idx on public.rate_limit_attempts(bucket, key, created_at);
+alter table public.rate_limit_attempts enable row level security;
+grant select, insert, delete on public.rate_limit_attempts to service_role;
+
 -- ── Realtime so every device sees changes instantly ──
 -- Guarded because `alter publication ... add table` has no `if not exists`
 -- form and errors ("already member of publication") on a second run.

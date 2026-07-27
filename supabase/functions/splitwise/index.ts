@@ -1,5 +1,6 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
+import { clientIp, isRateLimited, recordFailure } from "../_shared/rateLimit.ts";
 
 // Stateless proxy to the Splitwise API — the only thing in this project that
 // holds the Splitwise API key. Needs no Supabase database access: the
@@ -193,6 +194,22 @@ async function handlePush(apiKey: string, groupId: string, body: Record<string, 
   return Response.json({ ok: true, expense_id: String(expense.id) });
 }
 
+/** Peek at an action's response to decide whether it represents a failure
+ * worth counting toward the rate limit — `link` returning `linked: false`
+ * is exactly the email-probing signal this exists to slow down, and a clean
+ * `ok: false` from push/delete is the equivalent for those two actions. Uses
+ * a clone so the original response body is still intact for the caller. */
+async function maybeRecordFailure(res: Response, ip: string): Promise<void> {
+  try {
+    const json = await res.clone().json();
+    if (json?.ok === false || json?.linked === false) {
+      await recordFailure("splitwise", ip);
+    }
+  } catch {
+    // Not a JSON body (e.g. the 405 below) — nothing to record.
+  }
+}
+
 async function handleDelete(apiKey: string, body: Record<string, unknown>) {
   const expenseId = typeof body.expense_id === "string" ? body.expense_id : "";
   if (!expenseId) return Response.json({ ok: false, error: "bad_request" });
@@ -229,6 +246,16 @@ export default {
       return new Response("Method not allowed", { status: 405 });
     }
 
+    // The "link" action lets any authenticated session (trivial to get
+    // anonymously — see the design doc's §4.10) check whether an arbitrary
+    // email belongs to the real Splitwise group. Without a throttle, that's
+    // an unlimited-speed membership oracle. Keyed by IP, checked once for
+    // whichever action this request turns out to be.
+    const ip = clientIp(req);
+    if (await isRateLimited("splitwise", ip)) {
+      return Response.json({ ok: false, error: "rate_limited" }, { status: 429 });
+    }
+
     const apiKey = Deno.env.get("SPLITWISE_API_KEY");
     const groupId = Deno.env.get("SPLITWISE_GROUP_ID");
     if (!apiKey || !groupId) {
@@ -242,15 +269,21 @@ export default {
       return Response.json({ ok: false, error: "bad_request" });
     }
 
+    let res: Response;
     switch (body.action) {
       case "link":
-        return handleLink(apiKey, groupId, body);
+        res = await handleLink(apiKey, groupId, body);
+        break;
       case "push":
-        return handlePush(apiKey, groupId, body);
+        res = await handlePush(apiKey, groupId, body);
+        break;
       case "delete":
-        return handleDelete(apiKey, body);
+        res = await handleDelete(apiKey, body);
+        break;
       default:
         return Response.json({ ok: false, error: "bad_request" });
     }
+    await maybeRecordFailure(res, ip);
+    return res;
   }),
 };

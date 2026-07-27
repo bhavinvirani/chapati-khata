@@ -1,6 +1,7 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { createClient } from "@supabase/supabase-js";
+import { clientIp, isRateLimited, recordFailure } from "../_shared/rateLimit.ts";
 
 // Mirrors src/lib/util.ts's normalizeName — Deno can't import from src/lib, so
 // this is a hand-kept duplicate. Format characters (\p{Cf}: zero-width space,
@@ -17,6 +18,15 @@ export default {
   fetch: withSupabase({ auth: ["publishable"] }, async (req) => {
     if (req.method !== "POST") {
       return new Response("Method not allowed", { status: 405 });
+    }
+
+    // A 4-digit code has only 10,000 combinations — with no throttle, that's
+    // brute-forceable in well under a minute. Keyed by IP, not by name, so
+    // several housemates on the same home network sharing one public IP
+    // don't fight over a single budget the moment any of them mistypes it.
+    const ip = clientIp(req);
+    if (await isRateLimited("validate-access", ip)) {
+      return Response.json({ ok: false, error: "rate_limited" }, { status: 429 });
     }
 
     // ── parse body safely ──
@@ -37,6 +47,7 @@ export default {
       return Response.json({ ok: false, error: "config" }, { status: 500 });
     }
     if (codeStr !== entryCode) {
+      await recordFailure("validate-access", ip);
       return Response.json({ ok: false, error: "code" });
     }
 
@@ -51,6 +62,7 @@ export default {
     }
 
     if (!clean) {
+      await recordFailure("validate-access", ip);
       return Response.json({ ok: false, error: "name" });
     }
 
@@ -66,6 +78,7 @@ export default {
       return Response.json({ ok: false, error: "config" }, { status: 500 });
     }
     if (!data || data.length === 0) {
+      await recordFailure("validate-access", ip);
       return Response.json({ ok: false, error: "name" });
     }
 

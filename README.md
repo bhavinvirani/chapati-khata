@@ -38,9 +38,10 @@ permanent and portable.
    while still keeping random internet traffic out.
 3. **Create the tables.** Open **SQL Editor > New query**, paste the entire
    contents of [`supabase/schema.sql`](supabase/schema.sql), and click **Run**.
-   You should see "Success. No rows returned." This creates all six tables
-   (`weeks`, `entries`, `entry_shares`, `users`, `settlements`, `logs`), their
-   access rules, and realtime publication in one shot.
+   You should see "Success. No rows returned." This creates all seven tables
+   (`weeks`, `entries`, `entry_shares`, `users`, `settlements`,
+   `rate_limit_attempts`, `logs`), their access rules, and realtime
+   publication in one shot.
 4. **Tell the migration history it's already applied.** This repo tracks schema
    changes as numbered files under [`supabase/migrations/`](supabase/migrations/),
    and step 5's automated deploy runs them on every push. Since you just created
@@ -50,7 +51,7 @@ permanent and portable.
    supabase link --project-ref <your-project-ref>
    supabase migration repair --status applied \
      20260725195338 20260726003110 20260726080036 \
-     20260726120000 20260726130000 20260726140000
+     20260726120000 20260726130000 20260726140000 20260727010000
    ```
    (Your project ref is the subdomain in your project URL, e.g. `abcd1234` from
    `https://abcd1234.supabase.co`.) Any _new_ migration added after this point
@@ -256,18 +257,20 @@ anything.
 - **Supabase** (hosted Postgres + Edge Functions) for shared, durable storage,
   realtime updates, and the two server-side checks that must never run in the
   browser (the login code, and the Splitwise API key).
-- Six tables - `weeks`, `entries`, `entry_shares`, `users`, `settlements`,
-  `logs`. An add's cost is split per person into `entry_shares`; a
-  `settlement` groups whichever weeks were paid together in one click and is
-  the unit a Splitwise push covers. See [`supabase/schema.sql`](supabase/schema.sql)
-  for a fresh install, or [`supabase/migrations/`](supabase/migrations/) for
-  the schema's history.
+- Seven tables - `weeks`, `entries`, `entry_shares`, `users`, `settlements`,
+  `rate_limit_attempts`, `logs`. An add's cost is split per person into
+  `entry_shares`; a `settlement` groups whichever weeks were paid together in
+  one click and is the unit a Splitwise push covers. See
+  [`supabase/schema.sql`](supabase/schema.sql) for a fresh install, or
+  [`supabase/migrations/`](supabase/migrations/) for the schema's history.
 - All database access is isolated in [`src/lib/db.ts`](src/lib/db.ts). Swap backends
   by rewriting one file.
 - Two edge functions in [`supabase/functions/`](supabase/functions/):
-  `validate-access` (checks the sign-in code + name server-side) and
-  `splitwise` (the only thing that holds the Splitwise API key - proxies
-  linking a person, pushing an expense, and deleting one on reopen).
+  `validate-access` (checks the sign-in code + name server-side, rate-limited
+  by IP) and `splitwise` (the only thing that holds the Splitwise API key -
+  proxies linking a person, pushing an expense, and deleting one on reopen;
+  also rate-limited). Both share the throttling logic in
+  [`supabase/functions/_shared/rateLimit.ts`](supabase/functions/_shared/rateLimit.ts).
 
 ```
 src/
@@ -316,8 +319,10 @@ supabase/
   schema.sql              # fresh-install reference (run once in the SQL Editor)
   migrations/             # incremental schema history (applied by deploy.yml)
   functions/
-    validate-access/      # server-side sign-in check
-    splitwise/             # link/push/delete proxy — the only holder of the API key
+    validate-access/      # server-side sign-in check, rate-limited
+    splitwise/             # link/push/delete proxy — the only holder of the API key, rate-limited
+    _shared/
+      rateLimit.ts          # shared IP-keyed failure-counter used by both functions above
 ```
 
 ## A note on the "light gate"
@@ -328,3 +333,9 @@ honor system. The real safeguard is that **every action is logged and
 reversible**: if something looks wrong, open the Log tab, see exactly what
 changed, and undo it (reopen a week, fix or re-add an entry). That's
 proportionate for a small, trusted group tracking roti.
+
+A 4-digit code is brute-forceable in well under a minute with no throttle,
+so `validate-access` and `splitwise` both count failed attempts per IP in
+the `rate_limit_attempts` table and return `429` after 8 failures in 15
+minutes. Only failures count, so normal use - including a few housemates
+sharing one home IP - never trips it.

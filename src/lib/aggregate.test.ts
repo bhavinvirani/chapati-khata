@@ -134,7 +134,15 @@ describe("otherQty", () => {
 
 describe("nameOf", () => {
   const users = [
-    { id: A, name: "bhavin", in_split: true, can_login: true, created_at: "2026-07-01T00:00:00Z" },
+    {
+      id: A,
+      name: "bhavin",
+      in_split: true,
+      can_login: true,
+      created_at: "2026-07-01T00:00:00Z",
+      splitwise_email: null,
+      splitwise_user_id: null,
+    },
   ];
 
   it("resolves a known id", () => {

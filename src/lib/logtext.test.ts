@@ -7,9 +7,33 @@ const B = "id-b";
 const C = "id-c";
 
 const users: User[] = [
-  { id: A, name: "bhavin", in_split: true, can_login: true, created_at: "2026-07-01T00:00:00Z" },
-  { id: B, name: "deven", in_split: true, can_login: true, created_at: "2026-07-01T00:00:00Z" },
-  { id: C, name: "samir", in_split: true, can_login: true, created_at: "2026-07-01T00:00:00Z" },
+  {
+    id: A,
+    name: "bhavin",
+    in_split: true,
+    can_login: true,
+    created_at: "2026-07-01T00:00:00Z",
+    splitwise_email: null,
+    splitwise_user_id: null,
+  },
+  {
+    id: B,
+    name: "deven",
+    in_split: true,
+    can_login: true,
+    created_at: "2026-07-01T00:00:00Z",
+    splitwise_email: null,
+    splitwise_user_id: null,
+  },
+  {
+    id: C,
+    name: "samir",
+    in_split: true,
+    can_login: true,
+    created_at: "2026-07-01T00:00:00Z",
+    splitwise_email: null,
+    splitwise_user_id: null,
+  },
 ];
 
 const add = (over: Partial<Parameters<typeof describeAdd>[0]> = {}) => ({

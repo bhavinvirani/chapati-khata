@@ -15,6 +15,41 @@ interface Props {
   deviceId: string;
 }
 
+function EmailRow({
+  user,
+  disabled,
+  onSave,
+}: {
+  user: User;
+  disabled: boolean;
+  onSave: (email: string) => void;
+}) {
+  const [value, setValue] = useState(user.splitwise_email ?? "");
+  const linked = !!user.splitwise_user_id;
+  return (
+    <div className="ppl-splitwise">
+      <input
+        className="in ppl-email"
+        placeholder="Splitwise email"
+        value={value}
+        disabled={disabled}
+        autoComplete="off"
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          const clean = value.trim();
+          if (clean !== (user.splitwise_email ?? "")) onSave(clean);
+        }}
+        aria-label={`${user.name}'s Splitwise email`}
+      />
+      {value && (
+        <span className={"ppl-linked" + (linked ? " on" : "")}>
+          {linked ? "Linked" : "Not linked"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, deviceId }: Props) {
   const [newName, setNewName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<User | null>(null);
@@ -88,6 +123,20 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
     setPendingHeld(held);
   }
 
+  async function handleEmailSave(target: User, email: string) {
+    const clean = email.trim();
+    if (clean) {
+      const dupe = people.find(
+        (p) => p.id !== target.id && p.splitwise_email?.toLowerCase() === clean.toLowerCase(),
+      );
+      if (dupe) {
+        onError(`That email is already linked to ${cap(dupe.name)}.`);
+        return;
+      }
+    }
+    await run(() => db.setSplitwiseEmail(target, clean));
+  }
+
   const locked = busy || working;
 
   return (
@@ -111,55 +160,62 @@ export function PeopleSheet({ users, actor, busy, onClose, onChanged, onError, d
             const mayRevoke = canRevokeLogin(u, actor, users);
             return (
               <li key={u.id} className="ppl-row">
-                <span className="ppl-name">
-                  {cap(u.name)}
-                  {u.name === actor && <span className="ppl-you">you</span>}
-                  {/* `title` never renders on a phone, and this is the sheet's
-                      one safety-critical control — say why it is blocked. */}
-                  {u.can_login && !mayRevoke && (
-                    <span className="ppl-why">
-                      {u.name === actor ? "can't remove your own access" : "last login"}
-                    </span>
-                  )}
-                </span>
+                <div className="ppl-row-main">
+                  <span className="ppl-name">
+                    {cap(u.name)}
+                    {u.name === actor && <span className="ppl-you">you</span>}
+                    {/* `title` never renders on a phone, and this is the sheet's
+                        one safety-critical control — say why it is blocked. */}
+                    {u.can_login && !mayRevoke && (
+                      <span className="ppl-why">
+                        {u.name === actor ? "can't remove your own access" : "last login"}
+                      </span>
+                    )}
+                  </span>
 
-                <input
-                  type="checkbox"
-                  className="ppl-box"
-                  checked={u.in_split}
+                  <input
+                    type="checkbox"
+                    className="ppl-box"
+                    checked={u.in_split}
+                    disabled={locked}
+                    onChange={(e) =>
+                      run(() => db.setPersonFlag(u, "in_split", e.target.checked, actor, deviceId))
+                    }
+                    aria-label={`${u.name} in split`}
+                  />
+
+                  <input
+                    type="checkbox"
+                    className="ppl-box"
+                    checked={u.can_login}
+                    disabled={locked || (u.can_login && !mayRevoke)}
+                    title={
+                      u.can_login && !mayRevoke
+                        ? u.name === actor
+                          ? "You cannot revoke your own access"
+                          : "Someone must be able to log in"
+                        : undefined
+                    }
+                    onChange={(e) =>
+                      run(() => db.setPersonFlag(u, "can_login", e.target.checked, actor, deviceId))
+                    }
+                    aria-label={`${u.name} can log in`}
+                  />
+
+                  <button
+                    className="icon-btn"
+                    disabled={locked || (u.can_login && !mayRevoke)}
+                    onClick={() => askDelete(u)}
+                    aria-label={`Delete ${u.name}`}
+                  >
+                    <IcTrash className="ic sm" />
+                  </button>
+                </div>
+                <EmailRow
+                  user={u}
                   disabled={locked}
-                  onChange={(e) =>
-                    run(() => db.setPersonFlag(u, "in_split", e.target.checked, actor, deviceId))
-                  }
-                  aria-label={`${u.name} in split`}
+                  onSave={(email) => handleEmailSave(u, email)}
                 />
-
-                <input
-                  type="checkbox"
-                  className="ppl-box"
-                  checked={u.can_login}
-                  disabled={locked || (u.can_login && !mayRevoke)}
-                  title={
-                    u.can_login && !mayRevoke
-                      ? u.name === actor
-                        ? "You cannot revoke your own access"
-                        : "Someone must be able to log in"
-                      : undefined
-                  }
-                  onChange={(e) =>
-                    run(() => db.setPersonFlag(u, "can_login", e.target.checked, actor, deviceId))
-                  }
-                  aria-label={`${u.name} can log in`}
-                />
-
-                <button
-                  className="icon-btn"
-                  disabled={locked || (u.can_login && !mayRevoke)}
-                  onClick={() => askDelete(u)}
-                  aria-label={`Delete ${u.name}`}
-                >
-                  <IcTrash className="ic sm" />
-                </button>
               </li>
             );
           })}

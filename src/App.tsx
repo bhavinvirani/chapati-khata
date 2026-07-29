@@ -482,6 +482,7 @@ export default function App() {
                     if (w) confirmReopen(w);
                   }}
                   onPush={(w) => handlePush(w)}
+                  onError={flash}
                 />
               </>
             )}

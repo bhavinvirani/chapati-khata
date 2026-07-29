@@ -5,6 +5,7 @@ import { missingSplitwiseLinks, settlementDateRange } from "../lib/splitwise";
 import { money, round2 } from "../lib/util";
 import { WeekCard } from "./WeekCard";
 import { SplitwiseControl } from "./SplitwiseControl";
+import { ReceiptButton } from "./ReceiptButton";
 
 interface Props {
   paidCount: number;
@@ -16,6 +17,7 @@ interface Props {
   onExpand: () => void;
   onReopen: (weekId: string) => void;
   onPush: (w: WeekView) => void;
+  onError: (msg: string) => void;
 }
 
 /**
@@ -50,6 +52,7 @@ export function PaidHistory({
   onExpand,
   onReopen,
   onPush,
+  onError,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -100,6 +103,7 @@ export function PaidHistory({
                       onPay={() => {}}
                       onPush={() => onPush(w)}
                       onReopen={() => onReopen(w.week_start)}
+                      onError={onError}
                     />
                   </Fragment>
                 );
@@ -126,6 +130,11 @@ export function PaidHistory({
                           busy={busy}
                           onPush={() => onPush(group[0])}
                         />
+                        <ReceiptButton
+                          entries={groupEntries}
+                          weekIds={group.map((w) => w.week_start)}
+                          onError={onError}
+                        />
                         <button
                           className="link"
                           disabled={busy}
@@ -146,6 +155,7 @@ export function PaidHistory({
                         onPay={() => {}}
                         onPush={() => {}}
                         onReopen={() => {}}
+                        onError={onError}
                         showActions={false}
                       />
                     ))}

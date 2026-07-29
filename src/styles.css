@@ -255,7 +255,8 @@ html, body, #root{ min-height:100%; }
 .settle-day{ display:flex; align-items:baseline; gap:10px; font-size:12.5px; color:var(--soft); padding:3px 0; }
 .settle-day .row-day{ width:auto; flex:1; }
 .settle-total{ display:flex; align-items:baseline; gap:10px; font-size:13.5px; font-weight:700; border-top:1px dashed var(--line); margin-top:7px; padding-top:7px; }
-.settle-actions{ margin-top:6px; text-align:right; }
+.settle-actions{ margin-bottom:8px; }
+.settle-actions .btn{ width:100%; }
 .share-other .share-name{ font-style:italic; }
 .split-other{ margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); }
 .split-hint{ display:block; font-size:11px; color:var(--faint); margin-top:1px; }

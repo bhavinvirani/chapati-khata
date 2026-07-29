@@ -4,10 +4,9 @@
 
 When a payment is settled here, the numbers only ever live inside the app.
 Telling the other person what a payment covers means retyping it by hand into
-a chat. This adds a "Generate image" action that turns a settlement's entries
-into a single shareable picture — day-by-day quantity and amount, with any
-custom-rate adds called out — so the receipt itself can be sent, not
-retyped.
+a chat. This adds a "Generate receipt" action that turns a settlement's
+entries into a single shareable picture — day-by-day quantity, rate, and
+amount — so the receipt itself can be sent, not retyped.
 
 ## 2. What this is not
 
@@ -37,10 +36,12 @@ Thu Jul 22           25      $12.50
 ...
 ```
 
-A day is a single row (date, total qty, total amount) unless its adds carry
-more than one distinct rate, or a single rate that isn't `DEFAULT_PRICE` — in
-either case, indented sub-lines break the day down by rate: `qty @ rate`, one
-line per distinct rate present that day. This is the same logic already
+A day is a date/qty/amount row, plus an indented sub-line per distinct rate
+present that day: `qty @ rate`, always at least one line — a plain
+default-rate day states its one rate the same as a mixed-rate day states
+several. (Earlier drafts of this feature hid the rate line for a uniform
+default-rate day; real usage showed that hiding it just made the price look
+missing, so every day now always states it.) This is the same logic already
 implicit in `WeekCard`'s per-add `{qty} @ {rate}` line (`WeekCard.tsx:118-120`),
 just aggregated per rate per day instead of per add.
 
@@ -81,11 +82,16 @@ silently fall back to the browser default font mid-receipt.
 
 Two buttons, one shared implementation:
 
-- **`SettleSummary`** — a "Generate image" button alongside the existing
-  show/hide days control, using the same `entries`/`weekIds` props already
-  passed in. Available at the moment of Mark Paid / Settle All, before the
-  action is even confirmed, since the entries being paid are already fully
-  known at that point.
+- **`SettleSummary`** — a "Generate receipt" button, using the same
+  `entries`/`weekIds` props already passed in. Available at the moment of
+  Mark Paid / Settle All, before the action is even confirmed, since the
+  entries being paid are already fully known at that point. Placed
+  immediately under the date range, above the scrollable day/share list
+  (`.settle`'s `max-height:44vh; overflow-y:auto`) — an earlier placement at
+  the bottom of that scrollable area was easy to miss without scrolling, so
+  it now renders above the fold every time the dialog opens, styled as a
+  full-width `.btn.btn-pay` pill rather than a small text link so it reads
+  as a clear action, not a footnote.
 - **`PaidHistory`** — one button per settlement group (`groupBySettlement`),
   so a past payment's image can be (re)generated anytime: placed next to
   Reopen/`SplitwiseControl` for multi-week groups (`PaidHistory.tsx:122-136`),

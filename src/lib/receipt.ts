@@ -1,5 +1,4 @@
 import type { Entry } from "../types";
-import { DEFAULT_PRICE } from "../config";
 import { groupByDay, rateBreakdown, type RateGroup } from "./aggregate";
 import { round2 } from "./util";
 
@@ -12,8 +11,9 @@ export interface ReceiptDay {
   day: string;
   qty: number;
   amount: number;
-  /** Per-rate sub-lines, populated only when the day isn't uniformly at
-   * DEFAULT_PRICE — see shouldBreakOutRates. */
+  /** Every distinct rate charged that day, cheapest first — always at least
+   * one entry, even a single uniform default-rate day, so the receipt always
+   * states the price alongside the day's total. */
   rates: RateGroup[];
 }
 
@@ -25,31 +25,18 @@ export interface ReceiptData {
 }
 
 /**
- * A day is worth breaking into per-rate lines once it isn't simply "every
- * chapati at the one default price" — a single custom-rate day is exactly as
- * worth surfacing as a mixed-rate one.
- */
-export function shouldBreakOutRates(rates: RateGroup[]): boolean {
-  if (rates.length > 1) return true;
-  return rates.length === 1 && rates[0].rate !== DEFAULT_PRICE;
-}
-
-/**
  * Builds the day-by-day figures a payment receipt image shows, oldest day
  * first (a bill reads forward in time) — the reverse of groupByDay's
  * newest-first order, which exists for the app's own scan-what's-recent
  * lists.
  */
 export function buildReceiptData(entries: Entry[]): ReceiptData {
-  const days: ReceiptDay[] = [...groupByDay(entries)].reverse().map((d) => {
-    const rates = rateBreakdown(d.adds);
-    return {
-      day: d.day,
-      qty: d.qty,
-      amount: d.amount,
-      rates: shouldBreakOutRates(rates) ? rates : [],
-    };
-  });
+  const days: ReceiptDay[] = [...groupByDay(entries)].reverse().map((d) => ({
+    day: d.day,
+    qty: d.qty,
+    amount: d.amount,
+    rates: rateBreakdown(d.adds),
+  }));
   return {
     days,
     totalDays: days.length,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Entry } from "../types";
-import { buildReceiptData, shouldBreakOutRates } from "./receipt";
+import { buildReceiptData } from "./receipt";
 
 function entry(over: Partial<Entry> = {}): Entry {
   return {
@@ -18,25 +18,6 @@ function entry(over: Partial<Entry> = {}): Entry {
   };
 }
 
-describe("shouldBreakOutRates", () => {
-  it("hides the breakdown for a single default-rate group", () => {
-    expect(shouldBreakOutRates([{ rate: 0.5, qty: 12, amount: 6 }])).toBe(false);
-  });
-
-  it("shows the breakdown for a single custom-rate group", () => {
-    expect(shouldBreakOutRates([{ rate: 0.75, qty: 12, amount: 9 }])).toBe(true);
-  });
-
-  it("shows the breakdown whenever more than one rate is present", () => {
-    expect(
-      shouldBreakOutRates([
-        { rate: 0.5, qty: 5, amount: 2.5 },
-        { rate: 0.75, qty: 5, amount: 3.75 },
-      ]),
-    ).toBe(true);
-  });
-});
-
 describe("buildReceiptData", () => {
   it("orders days oldest first", () => {
     const mon = entry({ id: "e1", day: "2026-07-20" });
@@ -45,9 +26,9 @@ describe("buildReceiptData", () => {
     expect(data.days.map((d) => d.day)).toEqual(["2026-07-20", "2026-07-22"]);
   });
 
-  it("leaves a uniform default-rate day without a rate breakdown", () => {
+  it("states the rate even for a uniform default-rate day", () => {
     const data = buildReceiptData([entry({ rate: 0.5, qty: 12, amount: 6 })]);
-    expect(data.days[0].rates).toEqual([]);
+    expect(data.days[0].rates).toEqual([{ rate: 0.5, qty: 12, amount: 6 }]);
   });
 
   it("breaks out a mixed-rate day", () => {

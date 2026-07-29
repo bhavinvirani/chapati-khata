@@ -23,7 +23,7 @@ export function ReceiptButton({ entries, weekIds, onError, className = "link" }:
       const blob = await renderReceiptImage(entries, weekIds);
       await shareOrDownloadReceipt(blob, weekIds);
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Could not generate the image.");
+      onError(e instanceof Error ? e.message : "Could not generate the receipt.");
     } finally {
       setBusy(false);
     }
@@ -31,7 +31,7 @@ export function ReceiptButton({ entries, weekIds, onError, className = "link" }:
 
   return (
     <button className={className} disabled={busy} onClick={handleClick}>
-      {busy ? "Generating…" : "Generate image"}
+      {busy ? "Generating…" : "Generate receipt"}
     </button>
   );
 }

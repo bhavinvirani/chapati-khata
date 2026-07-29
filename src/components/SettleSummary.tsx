@@ -43,6 +43,15 @@ export function SettleSummary({ entries, users, weekIds, onError }: Props) {
         </span>
       </div>
 
+      <div className="settle-actions">
+        <ReceiptButton
+          entries={entries}
+          weekIds={weekIds}
+          onError={onError}
+          className="btn btn-pay"
+        />
+      </div>
+
       <button
         className="settle-days-btn"
         onClick={() => setShowDays(!showDays)}
@@ -84,15 +93,6 @@ export function SettleSummary({ entries, users, weekIds, onError }: Props) {
         <span className="share-name">Total</span>
         <span className="share-qty">{totalQty}</span>
         <span className="share-amt">{money(totalAmount)}</span>
-      </div>
-
-      <div className="settle-actions">
-        <ReceiptButton
-          entries={entries}
-          weekIds={weekIds}
-          onError={onError}
-          className="settle-days-btn"
-        />
       </div>
     </div>
   );

@@ -457,6 +457,7 @@ export default function App() {
                         }
                         onPush={() => handlePush(w)}
                         onReopen={() => confirmReopen(w)}
+                        onError={flash}
                       />
                     </Fragment>
                   );

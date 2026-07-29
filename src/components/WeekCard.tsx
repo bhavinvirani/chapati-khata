@@ -4,6 +4,7 @@ import { groupByDay, nameOf, needsRepair, otherQty, perPerson } from "../lib/agg
 import { missingSplitwiseLinks } from "../lib/splitwise";
 import { cap, dayLabel, isCurrentWeek, money, stamp, weekLabel } from "../lib/util";
 import { IcCheck, IcLock, IcPencil } from "./icons";
+import { ReceiptButton } from "./ReceiptButton";
 import { SplitwiseControl } from "./SplitwiseControl";
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
   onPay: () => void;
   onReopen: () => void;
   onPush: () => void;
+  onError: (msg: string) => void;
   /** False when this card is rendered inside a multi-week settlement group
    * (PaidHistory), which shows one shared Push/Pushed/Reopen control for the
    * whole group instead of duplicating it on every member card. */
@@ -32,6 +34,7 @@ export function WeekCard({
   onPay,
   onReopen,
   onPush,
+  onError,
   showActions = true,
 }: Props) {
   const [openAdd, setOpenAdd] = useState<string | null>(null);
@@ -214,6 +217,7 @@ export function WeekCard({
                 busy={busy}
                 onPush={onPush}
               />
+              <ReceiptButton entries={w.entries} weekIds={[w.week_start]} onError={onError} />
               <button className="link" disabled={busy} onClick={onReopen}>
                 Reopen
               </button>

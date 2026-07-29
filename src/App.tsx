@@ -223,6 +223,7 @@ export default function App() {
           onPayerChange={(id) => {
             pushPayerRef.current = id;
           }}
+          onError={flash}
         />
       ),
       cta: isRetry ? "Retry push" : "Push",
@@ -397,6 +398,7 @@ export default function App() {
                       entries={unpaid.flatMap((wk) => wk.entries)}
                       users={users}
                       weekIds={unpaid.map((wk) => wk.week_start)}
+                      onError={flash}
                     />
                   ),
                   cta: "Mark all paid",
@@ -445,6 +447,7 @@ export default function App() {
                                 entries={w.entries}
                                 users={users}
                                 weekIds={[w.week_start]}
+                                onError={flash}
                               />
                             ),
                             cta: "Mark paid",

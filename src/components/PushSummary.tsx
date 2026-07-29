@@ -10,6 +10,7 @@ interface Props {
   payerOptions: User[];
   defaultPayerId: string | null;
   onPayerChange: (userId: string | null) => void;
+  onError: (msg: string) => void;
 }
 
 /** The push confirm dialog's body: the same breakdown Mark Paid already
@@ -21,11 +22,12 @@ export function PushSummary({
   payerOptions,
   defaultPayerId,
   onPayerChange,
+  onError,
 }: Props) {
   const [payerId, setPayerId] = useState(defaultPayerId);
   return (
     <div className="push-summary">
-      <SettleSummary entries={entries} users={users} weekIds={weekIds} />
+      <SettleSummary entries={entries} users={users} weekIds={weekIds} onError={onError} />
       <label className="fld-l">Who paid?</label>
       <select
         className="in"

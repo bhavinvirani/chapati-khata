@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Entry, User } from "../types";
 import { groupByDay, nameOf, otherQty, perPerson } from "../lib/aggregate";
 import { cap, dayLabel, money, round2, weekLabel } from "../lib/util";
+import { ReceiptButton } from "./ReceiptButton";
 
 interface Props {
   /** Every add being settled by this action. */
@@ -9,6 +10,7 @@ interface Props {
   users: User[];
   /** Week ids covered, so the summary can say what period this payment is for. */
   weekIds: string[];
+  onError: (msg: string) => void;
 }
 
 const CURRENT_YEAR = String(new Date().getFullYear());
@@ -21,7 +23,7 @@ const CURRENT_YEAR = String(new Date().getFullYear());
  * same stored shares rather than passed in — a confirmation that trusted a
  * number computed elsewhere could confirm the wrong one.
  */
-export function SettleSummary({ entries, users, weekIds }: Props) {
+export function SettleSummary({ entries, users, weekIds, onError }: Props) {
   const [showDays, setShowDays] = useState(false);
   const people = perPerson(entries);
   const guests = otherQty(entries);
@@ -82,6 +84,15 @@ export function SettleSummary({ entries, users, weekIds }: Props) {
         <span className="share-name">Total</span>
         <span className="share-qty">{totalQty}</span>
         <span className="share-amt">{money(totalAmount)}</span>
+      </div>
+
+      <div className="settle-actions">
+        <ReceiptButton
+          entries={entries}
+          weekIds={weekIds}
+          onError={onError}
+          className="settle-days-btn"
+        />
       </div>
     </div>
   );

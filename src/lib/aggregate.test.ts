@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Entry, EntryShare } from "../types";
-import { groupByDay, nameOf, needsRepair, otherQty, perPerson } from "./aggregate";
+import { groupByDay, nameOf, needsRepair, otherQty, perPerson, rateBreakdown } from "./aggregate";
 
 const A = "user-a";
 const B = "user-b";
@@ -151,5 +151,29 @@ describe("nameOf", () => {
 
   it("falls back rather than rendering a raw uuid", () => {
     expect(nameOf(users, "ghost")).toBe("unknown");
+  });
+});
+
+describe("rateBreakdown", () => {
+  it("collapses one add into a single rate group", () => {
+    expect(rateBreakdown([entry({ rate: 0.5, qty: 12, amount: 6 })])).toEqual([
+      { rate: 0.5, qty: 12, amount: 6 },
+    ]);
+  });
+
+  it("groups same-rate adds together", () => {
+    const a = entry({ id: "e1", rate: 0.75, qty: 20, amount: 15 });
+    const b = entry({ id: "e2", rate: 0.75, qty: 5, amount: 3.75 });
+    expect(rateBreakdown([a, b])).toEqual([{ rate: 0.75, qty: 25, amount: 18.75 }]);
+  });
+
+  it("sorts distinct rates cheapest first", () => {
+    const cheap = entry({ id: "e1", rate: 0.5, qty: 10, amount: 5 });
+    const pricey = entry({ id: "e2", rate: 1, qty: 5, amount: 5 });
+    expect(rateBreakdown([pricey, cheap]).map((r) => r.rate)).toEqual([0.5, 1]);
+  });
+
+  it("is empty for no adds", () => {
+    expect(rateBreakdown([])).toEqual([]);
   });
 });

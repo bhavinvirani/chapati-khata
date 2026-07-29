@@ -58,6 +58,27 @@ export function groupByDay(entries: Entry[]): DayGroup[] {
     .sort((a, b) => b.day.localeCompare(a.day));
 }
 
+export interface RateGroup {
+  rate: number;
+  qty: number;
+  amount: number;
+}
+
+/**
+ * A day's adds grouped by rate, cheapest first — the "20 @ $0.75 / 10 @
+ * $1.00" breakdown a mixed-price day needs on the payment receipt image.
+ */
+export function rateBreakdown(adds: Entry[]): RateGroup[] {
+  const byRate = new Map<number, RateGroup>();
+  for (const a of adds) {
+    const row = byRate.get(a.rate) ?? { rate: a.rate, qty: 0, amount: 0 };
+    row.qty += a.qty;
+    row.amount = round2(row.amount + a.amount);
+    byRate.set(a.rate, row);
+  }
+  return [...byRate.values()].sort((a, b) => a.rate - b.rate);
+}
+
 /**
  * True when an add's shares are missing or do not add up to its total.
  *

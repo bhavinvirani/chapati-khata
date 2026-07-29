@@ -60,13 +60,18 @@ describe("buildReceiptData", () => {
     ]);
   });
 
+  it("breaks out a single custom-rate day", () => {
+    const data = buildReceiptData([entry({ rate: 0.75, qty: 12, amount: 9 })]);
+    expect(data.days[0].rates).toEqual([{ rate: 0.75, qty: 12, amount: 9 }]);
+  });
+
   it("totals across days and rounds money", () => {
-    const a = entry({ id: "e1", day: "2026-07-20", qty: 10, amount: 5 });
-    const b = entry({ id: "e2", day: "2026-07-21", qty: 7, amount: 3.5 });
+    const a = entry({ id: "e1", day: "2026-07-20", qty: 10, amount: 0.1 });
+    const b = entry({ id: "e2", day: "2026-07-21", qty: 7, amount: 0.2 });
     const data = buildReceiptData([a, b]);
     expect(data.totalDays).toBe(2);
     expect(data.totalQty).toBe(17);
-    expect(data.totalAmount).toBe(8.5);
+    expect(data.totalAmount).toBe(0.3);
   });
 
   it("merges entries across week boundaries into one chronological list", () => {

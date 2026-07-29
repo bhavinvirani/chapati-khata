@@ -1,7 +1,7 @@
 import type { Entry } from "../types";
 import { buildReceiptData } from "./receipt";
-import { settlementDateRange } from "./splitwise";
-import { dayLabel, money } from "./util";
+import { settlementDateRange, settlementLabel } from "./splitwise";
+import { dayLabel, money, todayStr } from "./util";
 
 // Canvas-drawn PNG receipt for a settlement — see docs/superpowers/specs/
 // 2026-07-28-payment-receipt-image-design.md. Deliberately drawn rather than
@@ -17,6 +17,12 @@ const ROW_H = 34;
 const SUBLINE_H = 22;
 const FOOTER_H = 96;
 
+// Roti mark drawn in the header, to the left of the "Chapati Khata" title —
+// a canvas equivalent of the <Roti> SVG in src/components/icons.tsx.
+const MARK_D = 20;
+const MARK_R = MARK_D / 2;
+const MARK_GAP = 8;
+
 const COLOR = {
   paper: "#F8F3E9",
   ink: "#241E15",
@@ -24,6 +30,7 @@ const COLOR = {
   faint: "#A99C85",
   line: "#EBE1CE",
   marigoldDeep: "#BE7C10",
+  marigoldTint: "#FAEECF",
 };
 
 const DISP = `'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif`;
@@ -53,7 +60,7 @@ export async function renderReceiptImage(entries: Entry[], weekIds: string[]): P
 
   await ensureFontsReady();
 
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH * dpr;
   canvas.height = height * dpr;
@@ -66,10 +73,33 @@ export async function renderReceiptImage(entries: Entry[], weekIds: string[]): P
 
   const y0 = PAD_TOP;
 
+  const markCx = PAD_X + MARK_R;
+  const markCy = y0 + 16;
+  ctx.beginPath();
+  ctx.arc(markCx, markCy, MARK_R, 0, Math.PI * 2);
+  ctx.fillStyle = COLOR.marigoldTint;
+  ctx.fill();
+  ctx.strokeStyle = COLOR.marigoldDeep;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+
+  ctx.fillStyle = COLOR.marigoldDeep;
+  const markDots: [number, number, number][] = [
+    [-3, -2, 1.15],
+    [2.5, -2.5, 0.8],
+    [1, 2.5, 1.05],
+    [-3.5, 2, 0.7],
+  ];
+  for (const [dx, dy, r] of markDots) {
+    ctx.beginPath();
+    ctx.arc(markCx + dx, markCy + dy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   ctx.fillStyle = COLOR.marigoldDeep;
   ctx.font = `800 24px ${DISP}`;
   ctx.textAlign = "left";
-  ctx.fillText("Chapati Khata", PAD_X, y0 + 26);
+  ctx.fillText("Chapati Khata", PAD_X + MARK_D + MARK_GAP, y0 + 26);
 
   ctx.fillStyle = COLOR.soft;
   ctx.font = `700 15px ${DISP}`;
@@ -130,15 +160,19 @@ export async function renderReceiptImage(entries: Entry[], weekIds: string[]): P
 
   ctx.font = `700 16px ${MONO}`;
   ctx.textAlign = "right";
-  ctx.fillText(`${data.totalQty} chapatis`, WIDTH - PAD_X, y + 38);
+  ctx.fillText(
+    `${data.totalQty} chapati${data.totalQty !== 1 ? "s" : ""}`,
+    WIDTH - PAD_X,
+    y + 38,
+  );
 
-  ctx.font = `800 22px ${MONO}`;
+  ctx.font = `700 22px ${MONO}`;
   ctx.fillText(money(data.totalAmount), WIDTH - PAD_X, y + 64);
 
   ctx.fillStyle = COLOR.faint;
   ctx.font = `400 11px ${MONO}`;
   ctx.textAlign = "left";
-  ctx.fillText(`Generated ${new Date().toLocaleDateString()}`, PAD_X, height - PAD_BOTTOM + 10);
+  ctx.fillText(`Generated ${dayLabel(todayStr())}`, PAD_X, height - PAD_BOTTOM + 10);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -159,7 +193,9 @@ function filenameFor(weekIds: string[]): string {
 /**
  * Hands a receipt image to the user: the OS share sheet where file sharing
  * is supported, a plain download otherwise. Swallows a user-cancelled share
- * (AbortError) rather than surfacing it as a failure.
+ * (AbortError) rather than surfacing it as a failure, and falls back to the
+ * download path for any other share failure so the user always ends up with
+ * the image one way or another.
  */
 export async function shareOrDownloadReceipt(blob: Blob, weekIds: string[]): Promise<void> {
   const filename = filenameFor(weekIds);
@@ -167,11 +203,11 @@ export async function shareOrDownloadReceipt(blob: Blob, weekIds: string[]): Pro
 
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: filename });
+      await navigator.share({ files: [file], title: settlementLabel(weekIds) });
       return;
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
-      throw e;
+      // fall through to the download below rather than dead-ending
     }
   }
 

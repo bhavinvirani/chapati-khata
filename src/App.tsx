@@ -21,6 +21,7 @@ import { Gate } from "./components/Gate";
 import { Header } from "./components/Header";
 import { TabSwitcher } from "./components/TabSwitcher";
 import { OfflineBanner } from "./components/OfflineBanner";
+import { InstallPrompt } from "./components/InstallPrompt";
 import { ToPayCard } from "./components/ToPayCard";
 import { AddForm } from "./components/AddForm";
 import { WeekCard } from "./components/WeekCard";
@@ -381,6 +382,8 @@ export default function App() {
         <TabSwitcher tab={tab} onTabChange={setTab} />
 
         {offline && <OfflineBanner onRetry={load} />}
+
+        <InstallPrompt />
 
         {tab === "ledger" ? (
           <main className="scroll">

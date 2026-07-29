@@ -94,6 +94,14 @@ Two buttons, one shared implementation:
 Both call one function, `renderReceiptImage(entries: Entry[], weekIds:
 string[]): Promise<Blob>`, so the layout logic exists exactly once.
 
+A third, emergent entry point: `SettleSummary` was already reused inside
+`PushSummary` (the "Push to Splitwise" confirm dialog, from the earlier
+Splitwise integration) before this feature existed, so the button appears
+there too as a side effect of adding it to `SettleSummary` itself — not a
+separately built surface. Left in deliberately rather than hidden behind a
+conditional: it's the same entries/weekIds, and "about to push this
+settlement to Splitwise" is a natural moment to also want its receipt image.
+
 ### 3.4 Getting the image out
 
 `navigator.share` with a `files` array, when supported (`navigator.canShare`

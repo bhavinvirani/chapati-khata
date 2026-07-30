@@ -56,6 +56,12 @@ export const IcDownload = (p: P) => (
     <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
   </Base>
 );
+export const IcShare = (p: P) => (
+  <Base {...p}>
+    <path d="M12 15V3m0 0 4 4m-4-4L8 7" />
+    <path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" />
+  </Base>
+);
 export const IcPeople = (p: P) => (
   <Base {...p}>
     <path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1" />

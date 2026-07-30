@@ -160,11 +160,7 @@ export async function renderReceiptImage(entries: Entry[], weekIds: string[]): P
 
   ctx.font = `700 16px ${MONO}`;
   ctx.textAlign = "right";
-  ctx.fillText(
-    `${data.totalQty} chapati${data.totalQty !== 1 ? "s" : ""}`,
-    WIDTH - PAD_X,
-    y + 38,
-  );
+  ctx.fillText(`${data.totalQty} chapati${data.totalQty !== 1 ? "s" : ""}`, WIDTH - PAD_X, y + 38);
 
   ctx.font = `700 22px ${MONO}`;
   ctx.fillText(money(data.totalAmount), WIDTH - PAD_X, y + 64);

@@ -172,6 +172,18 @@ export function WeekCard({
                           <span className="share-amt">{money(s.amount)}</span>
                         </li>
                       ))}
+                      {/* Without this the counts silently fall short of the
+                          add's own total — the guests' chapatis are in the
+                          headline qty but in nobody's row. Their cost is
+                          already spread across the shares above, so the money
+                          column stays blank. */}
+                      {e.other_qty > 0 && (
+                        <li className="share-row share-other">
+                          <span className="share-name">Others</span>
+                          <span className="share-qty">{e.other_qty}</span>
+                          <span className="share-amt" />
+                        </li>
+                      )}
                     </ul>
                   )}
                 </div>

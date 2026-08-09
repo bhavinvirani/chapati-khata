@@ -2038,7 +2038,11 @@ export async function checkSupabase(url, anonKey) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(`${url}/rest/v1/`, {
+    // /auth/v1/health, not the REST root: a valid sb_publishable_ key gets a
+    // 401 from `/rest/v1/`, so the obvious endpoint reports every modern key
+    // as rejected. This one discriminates correctly and depends on no table,
+    // schema, or RLS policy. Measured: valid key 200, bogus key 401.
+    const res = await fetch(`${url}/auth/v1/health`, {
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       signal: controller.signal,
     });

@@ -253,7 +253,7 @@ settings page, resolved from `gh repo view --json nameWithOwner`.
 After both halves of the Supabase connection are known, a single request:
 
 ```
-GET {url}/rest/v1/
+GET {url}/auth/v1/health
   apikey: {anonKey}
   Authorization: Bearer {anonKey}
 ```
@@ -262,6 +262,15 @@ GET {url}/rest/v1/
 401/403 means the key doesn't match the project. Any network failure is
 reported as a **warning, not a blocker** — being offline is not a
 configuration error.
+
+This design originally specified the REST root, `{url}/rest/v1/`. That was
+wrong, and measurement during implementation proved it: a **valid**
+`sb_publishable_` key gets a 401 from the REST root, so the check would have
+told every user on a modern Supabase key that their key was rejected — at the
+closing moment of the setup wizard, which is the worst possible place for a
+confident false failure. `/auth/v1/health` discriminates correctly (valid key
+200, bogus key 401) and, unlike reading a real table, depends on no table
+name, schema, or RLS policy, so a later migration cannot break it.
 
 No Splitwise call is ever made from the developer machine. The API key belongs
 to the edge function's environment, and shape-checking the group id is enough

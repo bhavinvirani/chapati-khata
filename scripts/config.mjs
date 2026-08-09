@@ -1,9 +1,22 @@
 #!/usr/bin/env node
-import { SETTINGS } from "./config/registry.mjs";
+import { SETTINGS, settingById } from "./config/registry.mjs";
 import { SURFACES, EFFECT_TEXT } from "./config/surfaces/index.mjs";
 import { isPlatformManaged } from "./config/surfaces/supabase.mjs";
 import { describeSetting } from "./config/render.mjs";
-import { bold, dim, green, yellow, red } from "./config/prompt.mjs";
+import {
+  bold,
+  dim,
+  green,
+  yellow,
+  red,
+  ask,
+  askSecret,
+  confirm,
+  choose,
+  pause,
+  openUrl,
+} from "./config/prompt.mjs";
+import * as git from "./config/git.mjs";
 
 const GROUPS = [
   { title: "App settings", surface: "config-file" },
@@ -129,9 +142,148 @@ export function printStatus(report) {
   }
 }
 
+const session = { configFileTouched: [], configFileDirtyBefore: false };
+
+async function promptValue(setting) {
+  for (;;) {
+    const raw = setting.secret
+      ? await askSecret(`  ${setting.label}`)
+      : await ask(`  ${setting.label}`);
+    if (raw === "") return null; // empty input cancels
+    const result = setting.validate(raw);
+    if (!result.ok) {
+      console.log(`  ${red(`✗ ${result.reason}`)}`);
+      continue;
+    }
+    if (result.warn) console.log(`  ${yellow(`⚠ ${result.warn}`)}`);
+    return result.value;
+  }
+}
+
+/** Write every target, reporting exactly how far it got. No rollback. */
+async function applyToTargets(setting, value) {
+  const results = [];
+  for (const target of setting.targets) {
+    const surface = SURFACES[target.surface];
+    try {
+      await surface.write(target.key, value);
+      results.push({ target, ok: true });
+      console.log(`  ${green("✓")} ${surface.label.padEnd(24)} ${target.key}`);
+    } catch (err) {
+      results.push({ target, ok: false, error: err });
+      console.log(`  ${red("✗")} ${surface.label.padEnd(24)} ${target.key} — ${err.message}`);
+      const manual =
+        target.surface === "supabase"
+          ? `supabase secrets set ${target.key}=<value>`
+          : target.surface.startsWith("github")
+            ? `gh secret set ${target.key}${target.surface === "github-env" ? " -e production" : ""}`
+            : `edit ${surface.label} by hand`;
+      console.log(`    ${dim(`Finish by hand:  ${manual}`)}`);
+    }
+  }
+
+  const effects = [
+    ...new Set(
+      results.filter((r) => r.ok).map((r) => EFFECT_TEXT[SURFACES[r.target.surface].effect]),
+    ),
+  ];
+  if (effects.length > 0) console.log(`  ${dim(effects.join(" · "))}`);
+
+  if (results.some((r) => r.ok && r.target.surface === "config-file")) {
+    session.configFileTouched.push({ label: setting.label, value, secret: !!setting.secret });
+  }
+  return results.every((r) => r.ok);
+}
+
+export async function editSetting(setting) {
+  console.log(`\n${bold(setting.label)}`);
+  console.log(`  ${dim(setting.help)}`);
+
+  if (setting.obtain) {
+    console.log(`  ${dim(setting.obtain.instructions)}`);
+    if (await confirm(`  Open ${setting.obtain.url}?`, { default: true })) {
+      if (!openUrl(setting.obtain.url)) console.log(`  ${dim(setting.obtain.url)}`);
+      await pause("  Press Enter once you have the value");
+    }
+  }
+
+  const value = await promptValue(setting);
+  if (value === null) {
+    console.log(`  ${dim("left unchanged")}`);
+    return { changed: false };
+  }
+  await applyToTargets(setting, value);
+  return { changed: true, value };
+}
+
+async function offerCommit() {
+  if (session.configFileTouched.length === 0) return;
+
+  console.log(`\n${bold("src/config.ts changed")}`);
+  console.log(await git.diff("src/config.ts"));
+
+  if (session.configFileDirtyBefore) {
+    console.log(`  ${yellow("⚠ src/config.ts already had uncommitted changes before this run.")}`);
+    console.log(
+      `  ${dim("Staging by path can't separate them from these, so they'd ride along. Commit it yourself.")}`,
+    );
+    return;
+  }
+
+  const message = git.commitMessage(session.configFileTouched);
+  const branch = await git.currentBranch();
+  const answer = await choose("What now?", [
+    { key: "1", label: `Commit and push  ${dim(`(${message})`)}` },
+    { key: "2", label: "Commit only" },
+    { key: "3", label: "Leave it — I'll commit myself" },
+  ]);
+  if (answer === "3") return;
+
+  await git.commit("src/config.ts", message);
+  console.log(`  ${green("✓")} committed`);
+  if (answer === "1") {
+    if (branch !== "main") {
+      console.log(
+        `  ${yellow(`⚠ you're on '${branch}', not main — this push won't trigger the deploy.`)}`,
+      );
+      if (!(await confirm("  Push anyway?", { default: false }))) return;
+    }
+    await git.push();
+    console.log(`  ${green("✓")} pushed`);
+  }
+}
+
+export async function runMenu() {
+  session.configFileDirtyBefore = await git.isDirty("src/config.ts");
+
+  for (;;) {
+    const report = await gather();
+    printStatus(report);
+
+    const available = SETTINGS.filter((s) =>
+      s.targets.every((t) => report.probes.get(t.surface)?.available),
+    );
+    const choices = available.map((s, i) => ({ key: String(i + 1), label: s.label }));
+    choices.push({ key: "q", label: "Quit" });
+
+    const picked = await choose("Change which setting?", choices);
+    if (picked === "q") break;
+    await editSetting(available[Number(picked) - 1]);
+  }
+
+  await offerCommit();
+}
+
+async function runWizard() {
+  console.log(dim("The setup wizard lands in the next task."));
+}
+
 async function main() {
-  const report = await gather();
-  printStatus(report);
+  if (process.argv.includes("--setup")) {
+    await runWizard();
+    return;
+  }
+  await runMenu();
 }
 
 // Only run when invoked directly, so tests can import gather/checkSupabase.

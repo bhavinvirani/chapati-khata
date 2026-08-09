@@ -2146,7 +2146,7 @@ The first task that writes anything. Fan-out, partial-failure reporting, and the
 **Interfaces:**
 
 - Consumes: everything from Tasks 1–9.
-- Produces: `editSetting(setting, report): Promise<{changed: boolean, value?}>` and `runMenu(): Promise<void>` in `scripts/config.mjs`; a module-level `session` object `{ configFileTouched: {label, value, secret}[], configFileDirtyBefore: boolean }` that Task 11's wizard reuses for the same git offer.
+- Produces: `editSetting(setting): Promise<{changed: boolean, value?}>` and `runMenu(): Promise<void>` in `scripts/config.mjs`. Note that `changed: true` means a write was attempted, **not** that every target succeeded — `applyToTargets` reports partial failure to the screen and its boolean return is deliberately unused. Also produces a module-level `session` object `{ configFileTouched: {label, value, secret}[], configFileDirtyBefore: boolean }` that Task 11's wizard reuses for the same git offer.
 
 - [ ] **Step 1: Add the edit flow**
 

@@ -1030,6 +1030,10 @@ async function repoSlug() {
 function setViaStdin(args, value) {
   return new Promise((resolve, reject) => {
     const child = spawn("gh", args, { stdio: ["pipe", "ignore", "pipe"] });
+    // A child that exits before draining stdin raises EPIPE on this stream.
+    // Swallow it here: the real failure is already reported by the close
+    // handler below, and an unhandled stream error would crash the script.
+    child.stdin.on("error", () => {});
     let stderr = "";
     child.stderr.on("data", (d) => (stderr += d));
     child.on("error", reject);

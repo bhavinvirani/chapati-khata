@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseEnv, setEnvLine } from "./dotenv.mjs";
+import { parseEnv, setEnvLine, toState } from "./dotenv.mjs";
 
 const ENV = `# Copy this file to ".env" and fill in your project's values.
 
@@ -45,5 +45,35 @@ describe("setEnvLine", () => {
 
   it("adds a trailing newline when the file lacks one", () => {
     expect(setEnvLine("A=1", "B", "2")).toBe("A=1\nB=2\n");
+  });
+});
+
+describe("parseEnv with edge cases", () => {
+  it("maps a bare KEY= line to an empty string", () => {
+    const envWithEmpty = "KEY_WITH_VALUE=abc\nKEY_EMPTY=\nKEY_WITH_VALUE2=def";
+    const parsed = parseEnv(envWithEmpty);
+    expect(parsed.get("KEY_EMPTY")).toBe("");
+  });
+
+  it("returns an empty map for empty text (absent .env)", () => {
+    expect(parseEnv("")).toEqual(new Map());
+  });
+});
+
+describe("toState", () => {
+  it("returns { known: true, present: false } for undefined", () => {
+    expect(toState(undefined)).toEqual({ known: true, present: false });
+  });
+
+  it("returns { known: true, present: false } for empty string", () => {
+    expect(toState("")).toEqual({ known: true, present: false });
+  });
+
+  it("returns { known: true, present: true, value } for a real value", () => {
+    expect(toState("https://example.com")).toEqual({
+      known: true,
+      present: true,
+      value: "https://example.com",
+    });
   });
 });

@@ -36,6 +36,12 @@ async function contents() {
   }
 }
 
+/** A key that is absent, or present but empty, counts as not set. */
+export function toState(value) {
+  if (value === undefined || value === "") return { known: true, present: false };
+  return { known: true, present: true, value };
+}
+
 export const id = "dotenv";
 export const label = ".env";
 export const effect = "needs-restart";
@@ -49,9 +55,7 @@ export async function list() {
 }
 
 export async function read(key) {
-  const value = parseEnv(await contents()).get(key);
-  if (value === undefined || value === "") return { known: true, present: false };
-  return { known: true, present: true, value };
+  return toState(parseEnv(await contents()).get(key));
 }
 
 export async function write(key, value) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { SETTINGS, settingById, WIZARD_STEPS } from "./config/registry.mjs";
+import { SETTINGS, WIZARD_STEPS } from "./config/registry.mjs";
 import { SURFACES, EFFECT_TEXT } from "./config/surfaces/index.mjs";
 import { isPlatformManaged } from "./config/surfaces/supabase.mjs";
 import { envSurface } from "./config/surfaces/github.mjs";

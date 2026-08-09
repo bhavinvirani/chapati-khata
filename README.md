@@ -112,17 +112,19 @@ it takes effect right away. The two switches are independent: someone can be
 in the split but unable to sign in (they eat, someone else logs it), or able
 to sign in but out of the split (on a break).
 
-The fastest way to set any of this is `npm run setup` for a guided first run,
-or `npm run config` to change one thing later. Both show what's already set
-across all four places config lives, and write each value everywhere it
-belongs. The manual steps below are what those commands do.
-
 Price and currency symbol live in [`src/config.ts`](src/config.ts):
 
 ```ts
 export const DEFAULT_PRICE = 0.5; // per chapati
 export const CURRENCY = "$";
 ```
+
+Rather than editing that file by hand, run `npm run setup` for a guided first
+pass or `npm run config` to change one value later. Both show what's already
+set across all four places config lives - `src/config.ts`, `.env`, Supabase,
+and GitHub - and write each value everywhere it belongs, so the three values
+that live in two places at once can't drift apart. The manual steps in this
+README are what those commands do.
 
 Names are matched case-insensitively.
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { SETTINGS, settingById } from "./config/registry.mjs";
+import { SETTINGS, settingById, WIZARD_STEPS } from "./config/registry.mjs";
 import { SURFACES, EFFECT_TEXT } from "./config/surfaces/index.mjs";
 import { isPlatformManaged } from "./config/surfaces/supabase.mjs";
+import { envSurface } from "./config/surfaces/github.mjs";
 import { describeSetting } from "./config/render.mjs";
 import {
   bold,
@@ -275,7 +276,87 @@ export async function runMenu() {
 }
 
 async function runWizard() {
-  console.log(dim("The setup wizard lands in the next task."));
+  session.configFileDirtyBefore = await git.isDirty("src/config.ts");
+
+  console.log(`\n${bold("Chapati Khata — setup")}`);
+  console.log(dim("Follow along with the README. Enter keeps whatever is already set.\n"));
+
+  let report = await gather();
+  let skipSplitwise = false;
+
+  for (const step of WIZARD_STEPS) {
+    const members = SETTINGS.filter((s) => s.wizard.step === step.n);
+    if (members.length === 0) continue;
+
+    console.log(`\n${bold(`Step ${step.n} — ${step.title}`)}`);
+
+    if (step.n === 5) {
+      skipSplitwise = !(await confirm("  Connect Splitwise?", { default: false }));
+      if (skipSplitwise) {
+        console.log(`  ${dim("skipped — everything else works the same without it")}`);
+        continue;
+      }
+    }
+
+    // Environment secrets need the environment to exist first.
+    if (members.some((s) => s.targets.some((t) => t.surface === "github-env"))) {
+      const probe = report.probes.get("github-env");
+      if (!probe?.available && /environment does not exist/.test(probe?.reason ?? "")) {
+        if (
+          await confirm("  The 'production' environment doesn't exist. Create it?", {
+            default: true,
+          })
+        ) {
+          await envSurface.ensureEnvironment();
+          console.log(`  ${green("✓")} created`);
+          report = await gather();
+        }
+      }
+    }
+
+    for (const setting of members) {
+      const blocked = setting.targets.some((t) => !report.probes.get(t.surface)?.available);
+      if (blocked) {
+        const why = setting.targets
+          .map((t) => report.probes.get(t.surface))
+          .find((p) => !p?.available);
+        console.log(`\n${bold(setting.label)}\n  ${yellow(`skipped — ${why?.reason}`)}`);
+        continue;
+      }
+
+      const { text } = describeSetting(setting, report.states.get(setting.id));
+      if (text !== "not set") {
+        console.log(`\n${bold(setting.label)}  ${dim(text)}`);
+        if (await confirm("  Keep this?", { default: true })) continue;
+      }
+
+      const result = await editSetting(setting);
+      if (result.changed) report = await gather();
+    }
+  }
+
+  await runLiveCheck(report);
+  await offerCommit();
+  printRemainingSteps();
+}
+
+async function runLiveCheck(report) {
+  const url = report.states.get("supabase-url")?.[0];
+  const key = report.states.get("supabase-anon-key")?.[0];
+  if (!url?.present || !key?.present) return;
+
+  console.log(`\n${bold("Checking the Supabase connection")}`);
+  const result = await checkSupabase(url.value, key.value);
+  if (result.ok === true) console.log(`  ${green("✓")} the URL and anon key work together`);
+  else if (result.ok === false) console.log(`  ${red(`✗ ${result.reason}`)}`);
+  else console.log(`  ${yellow(`⚠ couldn't check — ${result.reason}`)}`);
+}
+
+function printRemainingSteps() {
+  console.log(`\n${bold("Left to do in a browser")}`);
+  console.log('  • Settings → Pages → Build and deployment → Source: "GitHub Actions"');
+  console.log("  • Push to main (or re-run the workflow) to deploy");
+  console.log(`\n  ${dim("Run `npm run config` any time to change one thing.")}\n`);
 }
 
 async function main() {

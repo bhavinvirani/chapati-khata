@@ -453,9 +453,12 @@ Create `scripts/config/surfaces/configFile.mjs`:
 
 ```js
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { atomicWrite } from "../atomic.mjs";
 
-const FILE = new URL("../../../src/config.ts", import.meta.url).pathname;
+// fileURLToPath, not URL.pathname — pathname is percent-encoded, so a space
+// anywhere in the repo's path would arrive here as %20 and fail to open.
+const FILE = fileURLToPath(new URL("../../../src/config.ts", import.meta.url));
 
 const DECLARATION = /^\s*export const ([A-Z_][A-Z0-9_]*)\s*=\s*([^;]+);/gm;
 
@@ -641,9 +644,12 @@ Create `scripts/config/surfaces/dotenv.mjs`:
 
 ```js
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { atomicWrite } from "../atomic.mjs";
 
-const FILE = new URL("../../../.env", import.meta.url).pathname;
+// fileURLToPath, not URL.pathname — pathname is percent-encoded, so a space
+// anywhere in the repo's path would arrive here as %20 and fail to open.
+const FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
 
 // Anchored at line start with no leading `#`, so a commented-out example
 // line is never mistaken for a set value.

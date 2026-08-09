@@ -81,7 +81,13 @@ export async function checkSupabase(url, anonKey) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(`${url}/rest/v1/`, {
+    // Not the REST root: on a modern `sb_publishable_` key, `/rest/v1/` with
+    // no table returns 401 even for a key that works fine on real queries —
+    // it demands a secret key for that specific introspection route. Auth's
+    // health check discriminates valid from invalid keys correctly and
+    // depends on no table name, schema, or RLS policy, so it can't start
+    // failing because a migration renamed something.
+    const res = await fetch(`${url}/auth/v1/health`, {
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       signal: controller.signal,
     });

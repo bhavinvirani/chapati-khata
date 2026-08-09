@@ -109,4 +109,47 @@ describe("describeSetting", () => {
     const got = describeSetting(setting, [{ known: false, present: false }], NOW);
     expect(got.text).toBe("not set");
   });
+
+  it("does not warn about drift when a target could not be checked", () => {
+    // The exact reported scenario: a fresh clone with .env filled in but
+    // `supabase link` never run, so the second target was never read.
+    const setting = settingById("entry-code");
+    const got = describeSetting(
+      setting,
+      [
+        { known: true, present: true, value: "1234" },
+        { known: false, present: false, blocked: true },
+      ],
+      NOW,
+    );
+    expect(got.text).toContain("not checked");
+    expect(got.warning).toBeNull();
+  });
+
+  it("does not earn · both when one target could not be checked", () => {
+    const setting = settingById("supabase-url");
+    const got = describeSetting(
+      setting,
+      [
+        { known: true, present: true, value: "https://abc123.supabase.co" },
+        { known: false, present: false, blocked: true },
+      ],
+      NOW,
+    );
+    expect(got.text).not.toContain("both");
+  });
+
+  it("reports not checked when every target is blocked", () => {
+    const setting = settingById("entry-code");
+    const got = describeSetting(
+      setting,
+      [
+        { known: false, present: false, blocked: true },
+        { known: false, present: false, blocked: true },
+      ],
+      NOW,
+    );
+    expect(got.text).toBe("not checked");
+    expect(got.warning).toBeNull();
+  });
 });

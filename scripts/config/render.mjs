@@ -21,6 +21,7 @@ export function sinceText(iso, now = new Date()) {
 export function describeSetting(setting, states, now = new Date()) {
   const present = [];
   const absent = [];
+  const blocked = [];
   const parts = [];
   let differs = false;
 
@@ -30,6 +31,15 @@ export function describeSetting(setting, states, now = new Date()) {
 
   states.forEach((state, i) => {
     const surface = SURFACES[setting.targets[i].surface];
+
+    // Blocked means the surface couldn't be read at all — its own probe
+    // failed, or another surface upstream did. Absence you couldn't verify
+    // is not evidence of absence, so this is neither present nor absent.
+    if (state.blocked) {
+      blocked.push(surface.label);
+      parts.push(`${surface.label} — not checked`);
+      return;
+    }
 
     if (!state.present) {
       absent.push(surface.label);
@@ -51,18 +61,26 @@ export function describeSetting(setting, states, now = new Date()) {
     }
   });
 
-  if (present.length === 0) return { text: "not set", warning: null };
+  if (present.length === 0 && blocked.length === 0) return { text: "not set", warning: null };
+  // Nothing present and nothing confirmed absent either — every target was blocked.
+  if (present.length === 0 && absent.length === 0) return { text: "not checked", warning: null };
 
+  // A target we couldn't check is not evidence of drift: suppress the
+  // warning rather than accuse a setting of being unset or disagreeing when
+  // we simply never asked.
   let warning = null;
-  if (absent.length > 0) {
-    warning = `${setting.label} is set in ${present.join(", ")} but not set in ${absent.join(", ")}.`;
-  } else if (differs) {
-    warning = `${setting.label} differs between ${present.join(" and ")}.`;
+  if (blocked.length === 0) {
+    if (absent.length > 0) {
+      warning = `${setting.label} is set in ${present.join(", ")} but not set in ${absent.join(", ")}.`;
+    } else if (differs) {
+      warning = `${setting.label} differs between ${present.join(" and ")}.`;
+    }
   }
 
   // "· both" is earned only when every target of a multi-target setting is
-  // present and nothing disagrees.
-  const complete = setting.targets.length > 1 && absent.length === 0 && !differs;
+  // present, checked, and nothing disagrees.
+  const complete =
+    setting.targets.length > 1 && absent.length === 0 && blocked.length === 0 && !differs;
   const text = complete ? `${parts.join(" · ")} · both` : parts.join(" · ");
 
   return { text, warning };

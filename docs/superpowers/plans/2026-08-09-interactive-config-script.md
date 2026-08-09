@@ -2415,10 +2415,14 @@ async function runWizard() {
         continue;
       }
 
-      const { text } = describeSetting(setting, report.states.get(setting.id));
+      const { text, warning } = describeSetting(setting, report.states.get(setting.id));
       if (text !== "not set") {
         console.log(`\n${bold(setting.label)}  ${dim(text)}`);
-        if (await confirm("  Keep this?", { default: true })) continue;
+        if (warning) console.log(`  ${yellow(`⚠ ${warning}`)}`);
+        // A warning means this value is only half-configured — present on one
+        // target, missing on another. Re-entering it writes every target, so
+        // make that the default rather than "keep".
+        if (await confirm("  Keep this?", { default: !warning })) continue;
       }
 
       const result = await editSetting(setting);
@@ -2434,9 +2438,19 @@ async function runWizard() {
 async function runLiveCheck(report) {
   const url = report.states.get("supabase-url")?.[0];
   const key = report.states.get("supabase-anon-key")?.[0];
-  if (!url?.present || !key?.present) return;
 
   console.log(`\n${bold("Checking the Supabase connection")}`);
+
+  // Only the .env target can yield a plaintext value — the GitHub target
+  // always reports known:false — so targets[0] is the right one to read.
+  // But say so when it isn't there, rather than returning in silence and
+  // letting the closing summary read as success.
+  if (!url?.present || !key?.present) {
+    const missing = [!url?.present && "project URL", !key?.present && "anon key"].filter(Boolean);
+    console.log(`  ${yellow(`⚠ skipped — no ${missing.join(" or ")} in .env`)}`);
+    return;
+  }
+
   const result = await checkSupabase(url.value, key.value);
   if (result.ok === true) console.log(`  ${green("✓")} the URL and anon key work together`);
   else if (result.ok === false) console.log(`  ${red(`✗ ${result.reason}`)}`);

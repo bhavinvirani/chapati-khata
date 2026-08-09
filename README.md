@@ -281,8 +281,8 @@ anything.
   [`supabase/functions/_shared/rateLimit.ts`](supabase/functions/_shared/rateLimit.ts).
 
 ```
+scripts/config.mjs        # interactive setup + config editor
 src/
-  scripts/config.mjs      # interactive setup + config editor
   config.ts               # price, currency, Splitwise currency/category
   types.ts                # shared TypeScript types
   hooks/

@@ -16,7 +16,9 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "config": "node scripts/config.mjs",
+    "setup": "node scripts/config.mjs --setup"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

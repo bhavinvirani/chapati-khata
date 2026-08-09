@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "node",
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "scripts/**/*.{test,spec}.mjs"],
     // There are no tests yet; vitest exits 1 on "no test files found".
     passWithNoTests: true,
     // weekIdOf / parseYMD / todayStr / dayLabel / stamp are all local-time.

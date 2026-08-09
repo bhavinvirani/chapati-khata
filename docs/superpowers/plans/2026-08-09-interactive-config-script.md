@@ -1899,6 +1899,7 @@ export function sinceText(iso, now = new Date()) {
 export function describeSetting(setting, states, now = new Date()) {
   const present = [];
   const absent = [];
+  const blocked = [];
   const parts = [];
   let differs = false;
 
@@ -1909,6 +1910,14 @@ export function describeSetting(setting, states, now = new Date()) {
   states.forEach((state, i) => {
     const surface = SURFACES[setting.targets[i].surface];
 
+    // Blocked is its own bucket, never folded into absent: a target we could
+    // not reach is not a target we know to be unset, and saying otherwise
+    // states something untrue.
+    if (state.blocked) {
+      blocked.push(surface.label);
+      parts.push(`${surface.label} — not checked`);
+      return;
+    }
     if (!state.present) {
       absent.push(surface.label);
       return;
@@ -1929,18 +1938,26 @@ export function describeSetting(setting, states, now = new Date()) {
     }
   });
 
-  if (present.length === 0) return { text: "not set", warning: null };
+  if (present.length === 0) {
+    return { text: blocked.length > 0 ? "not checked" : "not set", warning: null };
+  }
 
+  // Any blocked target silences the drift warning. Absence you could not
+  // verify is not evidence of absence, and the group heading already prints
+  // why the surface was unreachable.
   let warning = null;
-  if (absent.length > 0) {
+  if (blocked.length > 0) {
+    warning = null;
+  } else if (absent.length > 0) {
     warning = `${setting.label} is set in ${present.join(", ")} but not set in ${absent.join(", ")}.`;
   } else if (differs) {
     warning = `${setting.label} differs between ${present.join(" and ")}.`;
   }
 
   // "· both" is earned only when every target of a multi-target setting is
-  // present and nothing disagrees.
-  const complete = setting.targets.length > 1 && absent.length === 0 && !differs;
+  // present and nothing disagrees — an unreachable target never earns it.
+  const complete =
+    setting.targets.length > 1 && absent.length === 0 && blocked.length === 0 && !differs;
   const text = complete ? `${parts.join(" · ")} · both` : parts.join(" · ");
 
   return { text, warning };

@@ -1938,20 +1938,20 @@ export function describeSetting(setting, states, now = new Date()) {
     }
   });
 
-  if (present.length === 0) {
-    return { text: blocked.length > 0 ? "not checked" : "not set", warning: null };
-  }
+  if (present.length === 0 && blocked.length === 0) return { text: "not set", warning: null };
+  // Nothing present and nothing confirmed absent either — every target was blocked.
+  if (present.length === 0 && absent.length === 0) return { text: "not checked", warning: null };
 
-  // Any blocked target silences the drift warning. Absence you could not
-  // verify is not evidence of absence, and the group heading already prints
-  // why the surface was unreachable.
+  // A target we couldn't check is not evidence of drift: suppress the
+  // warning rather than accuse a setting of being unset or disagreeing when
+  // we simply never asked.
   let warning = null;
-  if (blocked.length > 0) {
-    warning = null;
-  } else if (absent.length > 0) {
-    warning = `${setting.label} is set in ${present.join(", ")} but not set in ${absent.join(", ")}.`;
-  } else if (differs) {
-    warning = `${setting.label} differs between ${present.join(" and ")}.`;
+  if (blocked.length === 0) {
+    if (absent.length > 0) {
+      warning = `${setting.label} is set in ${present.join(", ")} but not set in ${absent.join(", ")}.`;
+    } else if (differs) {
+      warning = `${setting.label} differs between ${present.join(" and ")}.`;
+    }
   }
 
   // "· both" is earned only when every target of a multi-target setting is

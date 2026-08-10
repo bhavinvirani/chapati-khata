@@ -119,6 +119,13 @@ export const DEFAULT_PRICE = 0.5; // per chapati
 export const CURRENCY = "$";
 ```
 
+Rather than editing that file by hand, run `npm run setup` for a guided first
+pass or `npm run config` to change one value later. Both show what's already
+set across all four places config lives - `src/config.ts`, `.env`, Supabase,
+and GitHub - and write each value everywhere it belongs, so the three values
+that live in two places at once can't drift apart. The manual steps in this
+README are what those commands do.
+
 Names are matched case-insensitively.
 
 **Price tip:** the default price applies to every entry. If one day had a
@@ -157,7 +164,8 @@ whenever either changes.
 2. Add two **repository secrets** under **Settings > Secrets and variables >
    Actions**: `SUPABASE_URL` and `SUPABASE_ANON_KEY` - the same two values
    from Step 1 (also used by the keep-alive job in Step 6, so you only add
-   them once).
+   them once). `npm run config` sets these and their `.env` counterparts
+   together, so the two copies can't drift apart.
 3. Create a **production environment** (**Settings > Environments > New
    environment**, name it `production`) and add two **environment secrets**
    there, scoped to it rather than repo-wide since they grant real write
@@ -171,6 +179,7 @@ whenever either changes.
    ```bash
    supabase secrets set ENTRY_CODE=<the code your group will type to sign in>
    ```
+   `npm run config` writes this to both `.env` and Supabase in one go.
 5. Push to `main` (or re-run the workflow from the **Actions** tab). It
    derives the site's base path from your repo name (`/<repo>/`)
    automatically. Your site lands at `https://<you>.github.io/<repo>/`.
@@ -202,7 +211,8 @@ want it; everything else works the same without it.
    ```bash
    supabase secrets set SPLITWISE_API_KEY=<your key> SPLITWISE_GROUP_ID=<your group id>
    ```
-   or via the dashboard: **Edge Functions > splitwise > Secrets**.
+   or via the dashboard: **Edge Functions > splitwise > Secrets**, or
+   `npm run config`, which validates the group id before setting it.
 4. **Link each person.** In the People sheet, each row gets a Splitwise
    email field - type the email that person uses on Splitwise and it checks
    against the live group and shows Linked/Not linked. Someone must be
@@ -273,6 +283,7 @@ anything.
   [`supabase/functions/_shared/rateLimit.ts`](supabase/functions/_shared/rateLimit.ts).
 
 ```
+scripts/config.mjs        # interactive setup + config editor
 src/
   config.ts               # price, currency, Splitwise currency/category
   types.ts                # shared TypeScript types

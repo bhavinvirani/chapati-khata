@@ -1,0 +1,143 @@
+import { describe, it, expect } from "vitest";
+import { parseEnv, setEnvLine, toState } from "./dotenv.mjs";
+
+const ENV = `# Copy this file to ".env" and fill in your project's values.
+
+VITE_SUPABASE_URL=https://abc123.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGci.eyJpc3Mi.c2ln
+
+# Local dev only: 4-digit access code for the gate.
+# VITE_ENTRY_CODE=1234
+`;
+
+describe("parseEnv", () => {
+  it("reads real keys", () => {
+    expect(parseEnv(ENV).get("VITE_SUPABASE_URL")).toBe("https://abc123.supabase.co");
+  });
+
+  it("does not treat a commented-out key as set", () => {
+    expect(parseEnv(ENV).has("VITE_ENTRY_CODE")).toBe(false);
+  });
+
+  it("ignores blank lines and prose comments", () => {
+    expect([...parseEnv(ENV).keys()]).toEqual(["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]);
+  });
+});
+
+describe("setEnvLine", () => {
+  it("replaces an existing key in place", () => {
+    const out = setEnvLine(ENV, "VITE_SUPABASE_URL", "https://xyz789.supabase.co");
+    expect(out).toContain("VITE_SUPABASE_URL=https://xyz789.supabase.co");
+    expect(out.split("\n").length).toBe(ENV.split("\n").length);
+  });
+
+  it("appends a key that is absent, leaving the commented example alone", () => {
+    const out = setEnvLine(ENV, "VITE_ENTRY_CODE", "9999");
+    expect(out).toContain("# VITE_ENTRY_CODE=1234");
+    expect(out).toContain("\nVITE_ENTRY_CODE=9999\n");
+  });
+
+  it("leaves comments and unrelated keys byte-identical", () => {
+    const out = setEnvLine(ENV, "VITE_SUPABASE_URL", "https://xyz789.supabase.co");
+    const untouched = (text) => text.split("\n").filter((l) => !l.startsWith("VITE_SUPABASE_URL="));
+    expect(untouched(out)).toEqual(untouched(ENV));
+  });
+
+  it("adds a trailing newline when the file lacks one", () => {
+    expect(setEnvLine("A=1", "B", "2")).toBe("A=1\nB=2\n");
+  });
+
+  it("writes a value containing $& literally", () => {
+    // String.prototype.replace expands $&, $`, $', $n and $$ in a string
+    // replacement. The anon key validator accepts unknown key shapes, so a
+    // future key holding any of those would have silently corrupted .env.
+    const out = setEnvLine(
+      "VITE_SUPABASE_ANON_KEY=old\n",
+      "VITE_SUPABASE_ANON_KEY",
+      "sb_publishable_a$&b",
+    );
+    expect(out).toBe("VITE_SUPABASE_ANON_KEY=sb_publishable_a$&b\n");
+  });
+
+  it.each([["a$`b"], ["a$'b"], ["a$1b"], ["a$$b"]])(
+    "writes a value containing %s literally",
+    (value) => {
+      expect(setEnvLine("A=old\n", "A", value)).toBe(`A=${value}\n`);
+    },
+  );
+
+  it("refuses to rewrite a key that appears twice", () => {
+    // parseEnv reads the last occurrence; a rewrite lands on the first. The
+    // write would report success and read back as the old value.
+    expect(() => setEnvLine("A=1\nA=2\n", "A", "3")).toThrow(/A is set 2 times in \.env/);
+  });
+
+  it("still rewrites a key whose name is a prefix of another", () => {
+    const out = setEnvLine("A=1\nAB=2\n", "A", "3");
+    expect(out).toBe("A=3\nAB=2\n");
+  });
+});
+
+describe("parseEnv quoting and comments (matches Vite's dotenv loader)", () => {
+  it("strips a matched pair of double quotes", () => {
+    expect(parseEnv('VITE_ENTRY_CODE="1234"').get("VITE_ENTRY_CODE")).toBe("1234");
+  });
+
+  it("strips a matched pair of single quotes", () => {
+    expect(parseEnv("VITE_ENTRY_CODE='1234'").get("VITE_ENTRY_CODE")).toBe("1234");
+  });
+
+  it("leaves an unmatched quote as part of the value", () => {
+    expect(parseEnv('KEY="abc').get("KEY")).toBe('"abc');
+  });
+
+  it("leaves a mismatched quote pair as part of the value", () => {
+    expect(parseEnv("KEY=\"abc'").get("KEY")).toBe("\"abc'");
+  });
+
+  it("strips an inline comment preceded by whitespace from an unquoted value", () => {
+    expect(parseEnv("VITE_ENTRY_CODE=1234 # gate code").get("VITE_ENTRY_CODE")).toBe("1234");
+  });
+
+  it("keeps a # with no preceding whitespace as part of the value", () => {
+    expect(parseEnv("KEY=abc#def").get("KEY")).toBe("abc#def");
+  });
+
+  it("never treats a # inside a quoted value as a comment", () => {
+    expect(parseEnv('KEY="abc#def"').get("KEY")).toBe("abc#def");
+  });
+
+  it("still ignores a whole-line comment", () => {
+    expect(parseEnv('# KEY="1234"').has("KEY")).toBe(false);
+  });
+});
+
+describe("parseEnv with edge cases", () => {
+  it("maps a bare KEY= line to an empty string", () => {
+    const envWithEmpty = "KEY_WITH_VALUE=abc\nKEY_EMPTY=\nKEY_WITH_VALUE2=def";
+    const parsed = parseEnv(envWithEmpty);
+    expect(parsed.get("KEY_EMPTY")).toBe("");
+  });
+
+  it("returns an empty map for empty text (absent .env)", () => {
+    expect(parseEnv("")).toEqual(new Map());
+  });
+});
+
+describe("toState", () => {
+  it("returns { known: true, present: false } for undefined", () => {
+    expect(toState(undefined)).toEqual({ known: true, present: false });
+  });
+
+  it("returns { known: true, present: false } for empty string", () => {
+    expect(toState("")).toEqual({ known: true, present: false });
+  });
+
+  it("returns { known: true, present: true, value } for a real value", () => {
+    expect(toState("https://example.com")).toEqual({
+      known: true,
+      present: true,
+      value: "https://example.com",
+    });
+  });
+});

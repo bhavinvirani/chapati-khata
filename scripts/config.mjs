@@ -19,7 +19,7 @@ import {
 } from "./config/prompt.mjs";
 import * as git from "./config/git.mjs";
 
-const GROUPS = [
+export const GROUPS = [
   { title: "App settings", surface: "config-file" },
   { title: "Connection", surface: "dotenv" },
   { title: "Splitwise", surface: "supabase" },
@@ -91,10 +91,14 @@ export async function checkSupabase(url, anonKey) {
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
       signal: controller.signal,
     });
+    if (res.ok) return { ok: true };
     if (res.status === 401 || res.status === 403) {
       return { ok: false, reason: `the key was rejected (HTTP ${res.status})` };
     }
-    return { ok: true };
+    // Anything else is undetermined, not proof the pair works. A paused
+    // free-tier project answers on this route without being usable, and used
+    // to render as a clean "✓ the URL and anon key work together".
+    return { ok: null, reason: `Supabase answered HTTP ${res.status} — is the project paused?` };
   } catch (err) {
     // Undetermined, not failed — being offline is not a configuration error.
     return { ok: null, reason: err.name === "AbortError" ? "timed out after 8s" : err.message };
@@ -105,6 +109,11 @@ export async function checkSupabase(url, anonKey) {
 
 export function printStatus(report) {
   const warnings = [];
+  // What the screen could not see. Without this, a run where four settings
+  // were hidden and three half-read still closed with a green all-clear.
+  const unchecked = new Set();
+  let unavailableSurfaces = 0;
+  let blockedTargets = 0;
   console.log(`\n${bold("Chapati Khata — configuration")}\n`);
 
   for (const group of GROUPS) {
@@ -119,6 +128,8 @@ export function printStatus(report) {
     );
 
     if (!probe?.available) {
+      unavailableSurfaces += 1;
+      for (const member of members) unchecked.add(member.id);
       console.log(
         `    ${yellow(probe?.reason ?? "unavailable")} — ${members.length} settings hidden\n`,
       );
@@ -126,7 +137,12 @@ export function printStatus(report) {
     }
 
     for (const setting of members) {
-      const { text, warning } = describeSetting(setting, report.states.get(setting.id));
+      const states = report.states.get(setting.id) ?? [];
+      const blocked = states.filter((s) => s.blocked).length;
+      blockedTargets += blocked;
+      if (blocked > 0) unchecked.add(setting.id);
+
+      const { text, warning } = describeSetting(setting, states);
       const pad = " ".repeat(Math.max(1, 30 - setting.label.length));
       console.log(`    ${setting.label}${pad}${text}`);
       if (warning) warnings.push(warning);
@@ -144,6 +160,12 @@ export function printStatus(report) {
     console.log(`  ${yellow(`⚠ ${warnings.length} issue${warnings.length === 1 ? "" : "s"}`)}`);
     for (const w of warnings) console.log(`    ${w}`);
     console.log();
+  } else if (unavailableSurfaces > 0 || blockedTargets > 0) {
+    // "Agrees" would be a claim about places we never reached.
+    const n = unchecked.size;
+    console.log(
+      `  ${yellow(`✓ nothing disagrees — ${n} setting${n === 1 ? "" : "s"} not checked`)}\n`,
+    );
   } else {
     console.log(`  ${green("✓ everything agrees")}\n`);
   }
@@ -181,7 +203,9 @@ async function applyToTargets(setting, value) {
       console.log(`  ${red("✗")} ${surface.label.padEnd(24)} ${target.key} — ${err.message}`);
       const manual =
         target.surface === "supabase"
-          ? `supabase secrets set ${target.key}=<value>`
+          ? // Never `supabase secrets set KEY=value`: that puts the secret in
+            // argv for anyone running `ps`, which is why write() uses a file.
+            `supabase secrets set --env-file <file holding ${target.key}=…>, or set it in the Supabase dashboard`
           : target.surface.startsWith("github")
             ? `gh secret set ${target.key}${target.surface === "github-env" ? " -e production" : ""}`
             : `edit ${surface.label} by hand`;
@@ -202,7 +226,7 @@ async function applyToTargets(setting, value) {
   return results.every((r) => r.ok);
 }
 
-export async function editSetting(setting) {
+export async function editSetting(setting, { unset = false } = {}) {
   console.log(`\n${bold(setting.label)}`);
   console.log(`  ${dim(setting.help)}`);
 
@@ -216,7 +240,12 @@ export async function editSetting(setting) {
 
   const value = await promptValue(setting);
   if (value === null) {
-    console.log(`  ${dim("left unchanged")}`);
+    // "left unchanged" is a lie when there was nothing there to leave.
+    if (unset && setting.wizard?.required) {
+      console.log(`  ${yellow("skipped — you'll need this before deploying")}`);
+    } else {
+      console.log(`  ${dim("left unchanged")}`);
+    }
     return { changed: false };
   }
   await applyToTargets(setting, value);
@@ -246,8 +275,19 @@ async function offerCommit() {
   ]);
   if (answer === "3") return;
 
-  await git.commit("src/config.ts", message);
-  console.log(`  ${green("✓")} committed`);
+  // git fails for routine first-time reasons — no user.email, no upstream,
+  // a rejected push. None of them undo the writes that already landed, and
+  // none of them should cost the user the closing instructions, so report and
+  // carry on rather than throwing out of the wizard.
+  try {
+    await git.commit("src/config.ts", message);
+    console.log(`  ${green("✓")} committed`);
+  } catch (err) {
+    console.log(`  ${red(`✗ couldn't commit — ${gitErrorText(err)}`)}`);
+    console.log(`  ${dim("your changes are written to src/config.ts; commit it yourself")}`);
+    return;
+  }
+
   if (answer === "1") {
     if (branch !== "main") {
       console.log(
@@ -255,9 +295,53 @@ async function offerCommit() {
       );
       if (!(await confirm("  Push anyway?", { default: false }))) return;
     }
-    await git.push();
-    console.log(`  ${green("✓")} pushed`);
+    try {
+      await git.push();
+      console.log(`  ${green("✓")} pushed`);
+    } catch (err) {
+      console.log(`  ${red(`✗ couldn't push — ${gitErrorText(err)}`)}`);
+      console.log(`  ${dim("the commit is safe on this branch; push it yourself")}`);
+    }
   }
+}
+
+/** The one line of a git failure worth showing, out of its several. */
+export function gitErrorText(err) {
+  const lines = `${err?.stderr ?? ""}\n${err?.message ?? ""}`
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return lines.find((l) => /^(fatal|error):/i.test(l)) ?? lines[0] ?? "unknown error";
+}
+
+/**
+ * One menu row per setting. A setting used to disappear entirely when any one
+ * of its surfaces was unreachable, with no message — so on a fresh clone you
+ * could see "Entry code" on the status screen and have no way to set it. A
+ * partially blocked setting is offered with the caveat spelled out; only a
+ * setting with nowhere at all to write is unselectable.
+ */
+export function menuEntries(report) {
+  let n = 0;
+  return SETTINGS.map((setting) => {
+    const blocked = setting.targets.filter((t) => !report.probes.get(t.surface)?.available);
+    const writable = setting.targets.filter((t) => report.probes.get(t.surface)?.available);
+
+    if (blocked.length === 0) {
+      return { setting, key: String(++n), label: setting.label };
+    }
+    const blockedLabels = blocked.map((t) => SURFACES[t.surface].label).join(", ");
+    if (writable.length === 0) {
+      const reason = report.probes.get(blocked[0].surface)?.reason ?? "unavailable";
+      return { setting, key: null, label: `${setting.label}  (${reason})` };
+    }
+    const writableLabels = writable.map((t) => SURFACES[t.surface].label).join(", ");
+    return {
+      setting,
+      key: String(++n),
+      label: `${setting.label}  (${blockedLabels} unavailable — will write ${writableLabels} only)`,
+    };
+  });
 }
 
 export async function runMenu() {
@@ -267,15 +351,17 @@ export async function runMenu() {
     const report = await gather();
     printStatus(report);
 
-    const available = SETTINGS.filter((s) =>
-      s.targets.every((t) => report.probes.get(t.surface)?.available),
-    );
-    const choices = available.map((s, i) => ({ key: String(i + 1), label: s.label }));
+    const entries = menuEntries(report);
+    const choices = entries.map((e) => ({ key: e.key, label: e.label }));
     choices.push({ key: "q", label: "Quit" });
 
     const picked = await choose("Change which setting?", choices);
     if (picked === "q") break;
-    await editSetting(available[Number(picked) - 1]);
+    // By key, not by index — the numbering skips the unselectable rows.
+    const chosen = entries.find((e) => e.key === picked);
+    if (!chosen) continue;
+    const unset = (report.states.get(chosen.setting.id) ?? []).every((s) => !s.present);
+    await editSetting(chosen.setting, { unset });
   }
 
   await offerCommit();
@@ -330,23 +416,60 @@ async function runWizard() {
         continue;
       }
 
-      const { text, warning } = describeSetting(setting, report.states.get(setting.id));
+      const states = report.states.get(setting.id) ?? [];
+      const { text, warning } = describeSetting(setting, states);
       if (text !== "not set") {
         console.log(`\n${bold(setting.label)}  ${dim(text)}`);
         if (warning) console.log(`  ${yellow(`⚠ ${warning}`)}`);
-        // A warning means this value is only half-configured. Re-entering it
-        // writes every target, so make that the default rather than "keep".
+        // A warning means this value is only half-configured, or is something
+        // that cannot be right at all (a .env.example placeholder). Re-entering
+        // it writes every target, so make that the default rather than "keep".
         if (await confirm("  Keep this?", { default: !warning })) continue;
       }
 
-      const result = await editSetting(setting);
+      const result = await editSetting(setting, { unset: states.every((s) => !s.present) });
       if (result.changed) report = await gather();
     }
   }
 
+  report = await gather();
   await runLiveCheck(report);
   await offerCommit();
-  printRemainingSteps();
+  printRemainingSteps(stillMissing(report));
+}
+
+/**
+ * Every setting the registry marks `required` that this run did not end up
+ * with a usable value for. `wizard.required` was declared on seven settings
+ * and read nowhere, so a wizard you pressed Enter through claimed success.
+ */
+export function stillMissing(report) {
+  const missing = [];
+  for (const setting of SETTINGS) {
+    if (!setting.wizard?.required) continue;
+    const states = report.states.get(setting.id) ?? [];
+
+    // Only a value we can see the plaintext of can be judged wrong.
+    const bad = states.find((s) => s.known && s.present && !setting.validate(s.value).ok);
+    if (bad) {
+      missing.push({ setting, reason: `looks wrong — ${setting.validate(bad.value).reason}` });
+      continue;
+    }
+
+    if (states.some((s) => s.present)) continue;
+
+    // Confirmed empty somewhere we could actually look beats "not checked":
+    // the user's problem is the missing value, not the missing CLI.
+    if (states.some((s) => !s.present && !s.blocked)) {
+      missing.push({ setting, reason: "not set" });
+      continue;
+    }
+
+    const blockedAt = states.findIndex((s) => s.blocked);
+    const probe = report.probes.get(setting.targets[blockedAt]?.surface);
+    missing.push({ setting, reason: `not checked — ${probe?.reason ?? "unavailable"}` });
+  }
+  return missing;
 }
 
 async function runLiveCheck(report) {
@@ -370,7 +493,15 @@ async function runLiveCheck(report) {
   else console.log(`  ${yellow(`⚠ couldn't check — ${result.reason}`)}`);
 }
 
-function printRemainingSteps() {
+export function printRemainingSteps(missing = []) {
+  if (missing.length > 0) {
+    console.log(`\n${bold("Still missing")}`);
+    for (const m of missing) {
+      console.log(`  ${yellow("•")} ${m.setting.label}  ${dim(m.reason)}`);
+    }
+    console.log(`  ${dim("Run `npm run config` to fill these in.")}`);
+  }
+
   console.log(`\n${bold("Left to do in a browser")}`);
   console.log('  • Settings → Pages → Build and deployment → Source: "GitHub Actions"');
   console.log("  • Push to main (or re-run the workflow) to deploy");
@@ -386,7 +517,9 @@ async function main() {
 }
 
 // Only run when invoked directly, so tests can import gather/checkSupabase.
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop())) {
+// Comparing whole paths, not basenames: the old check compared the last "/"
+// segment, which never matched on Windows and matched any other config.mjs.
+if (process.argv[1] && import.meta.filename === process.argv[1]) {
   main().catch((err) => {
     console.error(red(`\n${err.message}\n`));
     process.exit(1);

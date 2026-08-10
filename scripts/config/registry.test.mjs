@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { SETTINGS, settingById, WIZARD_STEPS } from "./registry.mjs";
 import { SURFACES } from "./surfaces/index.mjs";
+import { GROUPS } from "../config.mjs";
 
 describe("registry integrity", () => {
   it("has eleven settings and fourteen targets", () => {
@@ -18,6 +19,15 @@ describe("registry integrity", () => {
       for (const t of s.targets) {
         expect(SURFACES[t.surface], `${s.id} -> ${t.surface}`).toBeDefined();
       }
+    }
+  });
+
+  it("gives every setting a group on the status screen", () => {
+    // printStatus groups by targets[0].surface. Reordering a setting's
+    // targets would otherwise drop it off the status screen in silence.
+    const grouped = new Set(GROUPS.map((g) => g.surface));
+    for (const s of SETTINGS) {
+      expect(grouped.has(s.targets[0].surface), `${s.id} -> ${s.targets[0].surface}`).toBe(true);
     }
   });
 

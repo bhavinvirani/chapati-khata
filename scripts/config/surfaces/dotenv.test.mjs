@@ -78,6 +78,40 @@ describe("setEnvLine", () => {
   });
 });
 
+describe("parseEnv quoting and comments (matches Vite's dotenv loader)", () => {
+  it("strips a matched pair of double quotes", () => {
+    expect(parseEnv('VITE_ENTRY_CODE="1234"').get("VITE_ENTRY_CODE")).toBe("1234");
+  });
+
+  it("strips a matched pair of single quotes", () => {
+    expect(parseEnv("VITE_ENTRY_CODE='1234'").get("VITE_ENTRY_CODE")).toBe("1234");
+  });
+
+  it("leaves an unmatched quote as part of the value", () => {
+    expect(parseEnv('KEY="abc').get("KEY")).toBe('"abc');
+  });
+
+  it("leaves a mismatched quote pair as part of the value", () => {
+    expect(parseEnv("KEY=\"abc'").get("KEY")).toBe("\"abc'");
+  });
+
+  it("strips an inline comment preceded by whitespace from an unquoted value", () => {
+    expect(parseEnv("VITE_ENTRY_CODE=1234 # gate code").get("VITE_ENTRY_CODE")).toBe("1234");
+  });
+
+  it("keeps a # with no preceding whitespace as part of the value", () => {
+    expect(parseEnv("KEY=abc#def").get("KEY")).toBe("abc#def");
+  });
+
+  it("never treats a # inside a quoted value as a comment", () => {
+    expect(parseEnv('KEY="abc#def"').get("KEY")).toBe("abc#def");
+  });
+
+  it("still ignores a whole-line comment", () => {
+    expect(parseEnv('# KEY="1234"').has("KEY")).toBe(false);
+  });
+});
+
 describe("parseEnv with edge cases", () => {
   it("maps a bare KEY= line to an empty string", () => {
     const envWithEmpty = "KEY_WITH_VALUE=abc\nKEY_EMPTY=\nKEY_WITH_VALUE2=def";

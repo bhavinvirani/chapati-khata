@@ -10,11 +10,31 @@ const FILE = fileURLToPath(new URL("../../../.env", import.meta.url));
 // line is never mistaken for a set value.
 const ASSIGNMENT = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*=(.*)$/;
 
+// A `#` counts as the start of an inline comment only when whitespace
+// precedes it — `abc#def` is a value, `abc #def` is `abc` with a comment.
+const INLINE_COMMENT = /(?<=\s)#/;
+
+// Vite's dotenv loader strips a matched pair of surrounding quotes and, for
+// unquoted values, an inline `# comment`. Reading a value the way it was
+// written but not the way the loader actually consumes it makes working
+// config — `KEY="1234"`, `KEY=1234 # note` — look broken.
+function parseValue(raw) {
+  const trimmed = raw.trim();
+  const quote = trimmed[0];
+  const isQuoted =
+    (quote === '"' || quote === "'") &&
+    trimmed.length >= 2 &&
+    trimmed[trimmed.length - 1] === quote;
+  if (isQuoted) return trimmed.slice(1, -1).trim();
+  const commentAt = trimmed.search(INLINE_COMMENT);
+  return (commentAt === -1 ? trimmed : trimmed.slice(0, commentAt)).trim();
+}
+
 export function parseEnv(text) {
   const out = new Map();
   for (const line of text.split("\n")) {
     const m = line.match(ASSIGNMENT);
-    if (m) out.set(m[1], m[2].trim());
+    if (m) out.set(m[1], parseValue(m[2]));
   }
   return out;
 }

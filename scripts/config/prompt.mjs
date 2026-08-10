@@ -3,7 +3,20 @@ import { spawnSync } from "node:child_process";
 import { Writable } from "node:stream";
 
 const useColor = process.stdout.isTTY && !process.env.NO_COLOR;
-const paint = (code) => (s) => (useColor ? `[${code}m${s}[0m` : String(s));
+
+/**
+ * Wrap text in an SGR escape sequence. Written with an explicit \x1b rather
+ * than a literal ESC byte in the source: a literal one is invisible in an
+ * editor and does not survive being copied through documents, which is how
+ * this shipped once emitting a bare "[1m" for every styled string. Only a
+ * real TTY sees this path, so piped output — every test and CI run — looked
+ * perfect while the terminal showed garbage.
+ */
+export function ansi(code, text, enabled) {
+  return enabled ? `\x1b[${code}m${text}\x1b[0m` : String(text);
+}
+
+const paint = (code) => (s) => ansi(code, s, useColor);
 
 export const bold = paint("1");
 export const dim = paint("2");

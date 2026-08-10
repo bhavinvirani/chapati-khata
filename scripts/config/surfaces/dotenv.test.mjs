@@ -46,6 +46,36 @@ describe("setEnvLine", () => {
   it("adds a trailing newline when the file lacks one", () => {
     expect(setEnvLine("A=1", "B", "2")).toBe("A=1\nB=2\n");
   });
+
+  it("writes a value containing $& literally", () => {
+    // String.prototype.replace expands $&, $`, $', $n and $$ in a string
+    // replacement. The anon key validator accepts unknown key shapes, so a
+    // future key holding any of those would have silently corrupted .env.
+    const out = setEnvLine(
+      "VITE_SUPABASE_ANON_KEY=old\n",
+      "VITE_SUPABASE_ANON_KEY",
+      "sb_publishable_a$&b",
+    );
+    expect(out).toBe("VITE_SUPABASE_ANON_KEY=sb_publishable_a$&b\n");
+  });
+
+  it.each([["a$`b"], ["a$'b"], ["a$1b"], ["a$$b"]])(
+    "writes a value containing %s literally",
+    (value) => {
+      expect(setEnvLine("A=old\n", "A", value)).toBe(`A=${value}\n`);
+    },
+  );
+
+  it("refuses to rewrite a key that appears twice", () => {
+    // parseEnv reads the last occurrence; a rewrite lands on the first. The
+    // write would report success and read back as the old value.
+    expect(() => setEnvLine("A=1\nA=2\n", "A", "3")).toThrow(/A is set 2 times in \.env/);
+  });
+
+  it("still rewrites a key whose name is a prefix of another", () => {
+    const out = setEnvLine("A=1\nAB=2\n", "A", "3");
+    expect(out).toBe("A=3\nAB=2\n");
+  });
 });
 
 describe("parseEnv with edge cases", () => {

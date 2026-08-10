@@ -20,9 +20,18 @@ export function parseEnv(text) {
 }
 
 export function setEnvLine(text, key, value) {
-  const re = new RegExp(`^[ \\t]*${key}[ \\t]*=.*$`, "m");
+  const re = new RegExp(`^[ \\t]*${key}[ \\t]*=.*$`, "gm");
+  const hits = text.match(re) ?? [];
+  // parseEnv takes the last occurrence; a rewrite here would land on the
+  // first. The write would look like it succeeded and read back as the old
+  // value, so refuse rather than lose it.
+  if (hits.length > 1) {
+    throw new Error(`${key} is set ${hits.length} times in .env — edit that file by hand.`);
+  }
   const line = `${key}=${value}`;
-  if (re.test(text)) return text.replace(re, line);
+  // The replacer-function form, so a value containing $&, $1 or $` is written
+  // literally instead of being expanded by String.prototype.replace.
+  if (hits.length === 1) return text.replace(re, () => line);
   const gap = text === "" || text.endsWith("\n") ? "" : "\n";
   return `${text}${gap}${line}\n`;
 }

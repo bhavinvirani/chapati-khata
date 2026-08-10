@@ -56,13 +56,19 @@ export async function confirm(question, { default: fallback = true } = {}) {
   return answer === "y" || answer === "yes";
 }
 
+/**
+ * A choice with no `key` is shown but cannot be picked — for listing
+ * something the user should know exists even though it isn't available.
+ */
 export async function choose(question, choices) {
   for (;;) {
     console.log();
-    for (const c of choices) console.log(`  ${bold(c.key)}) ${c.label}`);
+    for (const c of choices) {
+      console.log(c.key ? `  ${bold(c.key)}) ${c.label}` : `     ${dim(c.label)}`);
+    }
     console.log();
     const answer = (await ask(question)).toLowerCase();
-    const hit = choices.find((c) => c.key.toLowerCase() === answer);
+    const hit = choices.find((c) => c.key && c.key.toLowerCase() === answer);
     if (hit) return hit.key;
     console.log(red("  Not one of the options."));
   }

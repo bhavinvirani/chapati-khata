@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
-import { writeFile, unlink, mkdtemp } from "node:fs/promises";
+import { writeFile, rm, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -91,6 +91,8 @@ export async function write(key, value) {
     await run("supabase", ["secrets", "set", "--env-file", file]);
     cache = null; // force a re-read so status reflects the new digest
   } finally {
-    await unlink(file).catch(() => {});
+    // The whole mkdtemp directory, not just the file inside it — otherwise
+    // every write leaves an empty directory behind in the temp dir.
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }

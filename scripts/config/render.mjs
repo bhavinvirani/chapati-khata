@@ -10,7 +10,13 @@ export function maskValue(setting, value) {
 }
 
 export function sinceText(iso, now = new Date()) {
-  const days = Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000);
+  // A surface that reports a secret with no timestamp used to render "NaNd
+  // ago". null needs its own guard: new Date(null) is the epoch, not NaN,
+  // which would render as "20674d ago" instead.
+  if (iso === null || iso === undefined) return "unknown";
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "unknown";
+  const days = Math.floor((now.getTime() - then) / 86_400_000);
   return days <= 0 ? "today" : `${days}d ago`;
 }
 
@@ -22,6 +28,7 @@ export function describeSetting(setting, states, now = new Date()) {
   const present = [];
   const absent = [];
   const blocked = [];
+  const invalid = [];
   const parts = [];
   let differs = false;
 
@@ -43,33 +50,66 @@ export function describeSetting(setting, states, now = new Date()) {
 
     if (!state.present) {
       absent.push(surface.label);
+      // Name the surface that is empty too: with only the blocked one in
+      // `parts`, ".env empty + Supabase unreachable" rendered as though .env
+      // had never been looked at.
+      parts.push(`${surface.label} — not set`);
       return;
     }
-    present.push(surface.label);
 
     if (state.known) {
+      // Validators used to run on typed input only, so a value copied
+      // straight out of .env.example read back as configured. Anything we
+      // can actually see the plaintext of gets checked.
+      const result = setting.validate(state.value);
+      if (!result.ok) {
+        // `warn` is accept-with-caveat (an unrecognised but plausible key
+        // shape); only ok:false means the value cannot be right.
+        invalid.push({ surface, reason: result.reason });
+        const shown = maskValue(setting, state.value);
+        parts.push(
+          setting.targets.length > 1
+            ? `${surface.label} ${shown} — looks wrong`
+            : `${shown} — looks wrong`,
+        );
+        return;
+      }
+      present.push(surface.label);
       parts.push(maskValue(setting, state.value));
-    } else if (state.digest && localValue !== null) {
+      return;
+    }
+
+    present.push(surface.label);
+    if (state.digest && localValue !== null) {
       if (digestMatches(state.digest, localValue)) {
         parts.push(`${surface.label} ✓ matches`);
       } else {
         differs = true;
-        parts.push(`${surface.label} ✓ ${sinceText(state.updatedAt, now)} — DIFFERENT`);
+        parts.push(`${surface.label} ⚠ ${sinceText(state.updatedAt, now)} — DIFFERENT`);
       }
     } else {
       parts.push(`${surface.label} set · ${sinceText(state.updatedAt, now)}`);
     }
   });
 
-  if (present.length === 0 && blocked.length === 0) return { text: "not set", warning: null };
+  if (present.length === 0 && blocked.length === 0 && invalid.length === 0) {
+    return { text: "not set", warning: null };
+  }
   // Nothing present and nothing confirmed absent either — every target was blocked.
-  if (present.length === 0 && absent.length === 0) return { text: "not checked", warning: null };
+  if (present.length === 0 && absent.length === 0 && invalid.length === 0) {
+    return { text: "not checked", warning: null };
+  }
 
   // A target we couldn't check is not evidence of drift: suppress the
   // warning rather than accuse a setting of being unset or disagreeing when
-  // we simply never asked.
+  // we simply never asked. A value we did read and that does not validate is
+  // evidence, though, so it outranks — and is never suppressed by — the rest.
   let warning = null;
-  if (blocked.length === 0) {
+  if (invalid.length > 0) {
+    warning = invalid
+      .map((i) => `${setting.label} in ${i.surface.label} looks wrong — ${i.reason}.`)
+      .join(" ");
+  } else if (blocked.length === 0) {
     if (absent.length > 0) {
       warning = `${setting.label} is set in ${present.join(", ")} but not set in ${absent.join(", ")}.`;
     } else if (differs) {
@@ -78,9 +118,13 @@ export function describeSetting(setting, states, now = new Date()) {
   }
 
   // "· both" is earned only when every target of a multi-target setting is
-  // present, checked, and nothing disagrees.
+  // present, checked, valid, and nothing disagrees.
   const complete =
-    setting.targets.length > 1 && absent.length === 0 && blocked.length === 0 && !differs;
+    setting.targets.length > 1 &&
+    absent.length === 0 &&
+    blocked.length === 0 &&
+    invalid.length === 0 &&
+    !differs;
   const text = complete ? `${parts.join(" · ")} · both` : parts.join(" · ");
 
   return { text, warning };

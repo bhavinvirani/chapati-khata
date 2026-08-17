@@ -103,11 +103,14 @@ the text composer.
 
 Notification copy: **names and action, no money.**
 
-| Log row          | Title                      | Body                 |
-| ---------------- | -------------------------- | -------------------- |
-| `create`, qty 21 | `Deven added 21 chapatis`  | `Wed 12 Aug`         |
-| `create`, qty 1  | `Deven added 1 chapati`    | `Wed 12 Aug`         |
-| `paid`           | `Bhavin settled the khata` | `Week of Mon 11 Aug` |
+| Log row          | Title                      | Body          |
+| ---------------- | -------------------------- | ------------- |
+| `create`, qty 21 | `Deven added 21 chapatis`  | `Wed Aug 12`  |
+| `create`, qty 1  | `Deven added 1 chapati`    | `Wed Aug 12`  |
+| `paid`           | `Bhavin settled the khata` | `Aug 10 – 16` |
+
+The bodies are `dayLabel` and `weekLabel` from `src/lib/util.ts` — the same
+phrasings the ledger itself uses, so a notification reads like the app.
 
 Everything above comes from `actor`, `qty_after`, `day` and `week_start` —
 columns with types. The richer alternative, reusing `logs.detail` (which
@@ -148,7 +151,9 @@ public.push_subscriptions (
 ```
 
 `endpoint` is the primary key because the browser already treats it as the
-identity of a subscription, and it makes re-subscribing an idempotent upsert.
+identity of a subscription. Re-subscribing is therefore an insert that may
+conflict — resolved by an update, not by `on conflict do update`, for the
+privilege reason in §3.7.
 
 `user_name` is what makes "skip the actor" work: the sender selects
 `user_name <> logs.actor`. It has to stay honest as devices change hands:

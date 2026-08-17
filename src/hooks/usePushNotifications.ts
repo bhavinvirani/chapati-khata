@@ -23,6 +23,7 @@ function wasDismissed(): boolean {
  * is the first thing the UI has to check before offering a button.
  */
 export function usePushNotifications(userName: string | null, deviceId: string) {
+  const [configured] = useState(() => push.configured());
   const [supported] = useState(() => push.pushSupported() && push.configured());
   const [needsHomeScreen] = useState(() => push.needsHomeScreen());
   const [permission, setPermission] = useState<NotificationPermission>(() => push.permission());
@@ -105,11 +106,22 @@ export function usePushNotifications(userName: string | null, deviceId: string) 
     }
   }, []);
 
-  // Nothing to offer when it cannot work, is already on, was refused at the
-  // browser level (only site settings can undo that), or was waved away.
-  const showBanner = supported && !enabled && !dismissed && permission !== "denied";
+  // On an iPhone the APIs are not merely unusable in a Safari tab, they are
+  // absent — `PushManager` and `Notification` only exist for an installed web
+  // app. So `supported` is false there, and gating the UI on it alone would
+  // hide the one message that device needs: add this to your Home Screen.
+  // `needsHomeScreen` is therefore its own way in, for the banner and for the
+  // People sheet's row alike.
+  const available = configured && (supported || needsHomeScreen);
+
+  // Nothing to offer when it cannot work here at all, is already on, was
+  // refused at the browser level (only site settings can undo that), or was
+  // waved away.
+  const showBanner =
+    available && !enabled && !dismissed && (needsHomeScreen || permission !== "denied");
 
   return {
+    available,
     supported,
     needsHomeScreen,
     permission,

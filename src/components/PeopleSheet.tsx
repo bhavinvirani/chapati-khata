@@ -19,6 +19,7 @@ interface Props {
 /** The slice of usePushNotifications this sheet renders. App owns the hook so
  * the banner and this toggle never disagree about whether it is on. */
 export interface NotifyControls {
+  available: boolean;
   supported: boolean;
   needsHomeScreen: boolean;
   permission: NotificationPermission;
@@ -34,10 +35,12 @@ export interface NotifyControls {
  * people list in its own section rather than as a column in someone's row.
  */
 function DeviceRow({ notify, onError }: { notify: NotifyControls; onError: (m: string) => void }) {
-  if (!notify.supported) return null;
+  // `available`, not `supported`: an iPhone in a Safari tab has no push APIs
+  // at all, and hiding the row there would leave no hint about why.
+  if (!notify.available) return null;
 
   const { needsHomeScreen, permission, enabled, busy } = notify;
-  const blocked = permission === "denied";
+  const blocked = notify.supported && permission === "denied";
 
   return (
     <div className="ppl-device">

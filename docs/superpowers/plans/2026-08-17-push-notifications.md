@@ -129,29 +129,32 @@ across every day and every Monday of a year.
 
 **Files:**
 
-- Create: `public/push-sw.js`, `src/lib/push.ts`, `src/lib/push.test.ts`, `src/hooks/usePushNotifications.ts`, `src/components/NotifyPrompt.tsx`
-- Modify: `vite.config.ts`, `src/lib/db.ts`, `src/App.tsx`, `src/components/PeopleSheet.tsx`, `src/components/icons.tsx`, `src/styles.css`, `src/vite-env.d.ts`, `.env.example`
+- Create: `public/push-sw.js`, `src/lib/push.ts`, `src/lib/push.test.ts`, `src/lib/pushSw.test.ts`, `src/lib/platform.ts`, `src/hooks/usePushNotifications.ts`, `src/components/NotifyPrompt.tsx`
+- Modify: `vite.config.ts`, `src/lib/db.ts`, `src/App.tsx`, `src/components/PeopleSheet.tsx`, `src/components/icons.tsx`, `src/hooks/useInstallPrompt.ts`, `src/styles.css`, `src/vite-env.d.ts`, `.env.example`
 
 **Steps:**
 
-- [ ] `public/push-sw.js` — a `push` listener calling `event.waitUntil(self.registration.showNotification(...))` with `tag`, `icon: "pwa-192x192.png"`, `badge`, and `data: { url }`. A payload that fails to parse still shows a generic card: `userVisibleOnly: true` means a silent push costs the site its permission.
-- [ ] The same file: `notificationclick` → `notification.close()`, then match `self.clients.matchAll({ type: "window", includeUncontrolled: true })` and `focus()` an existing client on the app's scope, else `clients.openWindow(url)`.
-- [ ] `vite.config.ts` — add `importScripts: ["push-sw.js"]` inside the existing `workbox` block. Leave `globPatterns` and `runtimeCaching` untouched; the new file is already matched by `**/*.{js,...}` and gets precached.
-- [ ] `src/vite-env.d.ts` — `readonly VITE_VAPID_PUBLIC_KEY?: string;` (optional: builds without it must still succeed, with notifications simply unavailable). Document it in `.env.example` next to the note explaining why the anon key is public.
-- [ ] `src/lib/push.ts`:
-  - `pushSupported()` — `"serviceWorker" in navigator && "PushManager" in window && "Notification" in window`.
-  - `needsHomeScreen()` — iOS and not standalone. Reuse the detection already written in `src/hooks/useInstallPrompt.ts` by lifting `isIos`/`isStandalone` into this module and importing them there, rather than writing a second copy.
+- [x] `public/push-sw.js` — a `push` listener calling `event.waitUntil(self.registration.showNotification(...))` with `tag`, `icon: "pwa-192x192.png"`, `badge`, and `data: { url }`. A payload that fails to parse still shows a generic card: `userVisibleOnly: true` means a silent push costs the site its permission.
+- [x] The same file: `notificationclick` → `notification.close()`, then match `self.clients.matchAll({ type: "window", includeUncontrolled: true })` and `focus()` an existing client on the app's scope, else `clients.openWindow(url)`.
+- [x] `vite.config.ts` — add `importScripts: ["push-sw.js"]` inside the existing `workbox` block. Leave `globPatterns` and `runtimeCaching` untouched; the new file is already matched by `**/*.{js,...}` and gets precached.
+- [x] `src/vite-env.d.ts` — `readonly VITE_VAPID_PUBLIC_KEY?: string;` (optional: builds without it must still succeed, with notifications simply unavailable). Document it in `.env.example` next to the note explaining why the anon key is public.
+- [x] `src/lib/push.ts`:
+  - `pushSupported()`, `configured()`, `permission()`.
+  - `needsHomeScreen()` — iOS and not standalone. `isIos`/`isStandalone` were lifted out of `src/hooks/useInstallPrompt.ts` into a new `src/lib/platform.ts` that both import, rather than a second copy.
+  - `subscribe()` drops and remakes a subscription whose `applicationServerKey` differs from the current one, so rotating the VAPID keypair does not mean asking everyone to clear site data.
+  - `registration()` races `navigator.serviceWorker.ready` against a timeout: `ready` never settles when no worker is registered, which is the case under `npm run dev`.
   - `urlBase64ToUint8Array(base64)` — the standard VAPID key decoder.
   - `getSubscription()`, `subscribe()`, `unsubscribe()` over `navigator.serviceWorker.ready`.
-- [ ] `src/lib/db.ts` — `savePushSubscription(sub, userName, deviceId)` and `deletePushSubscription(endpoint)`. Save is an `insert`, falling back to an `update ... eq("endpoint")` when the insert returns `23505`; **not** `.upsert()`, which needs table-wide select privilege. Both follow the module's existing `fail(context, error)` convention, and neither chains `.select()` (§Global Constraints).
-- [ ] `src/hooks/usePushNotifications.ts` — exposes `{ supported, needsHomeScreen, permission, enabled, busy, enable, disable }`, plus `dismissed`/`dismiss` against `localStorage` key `khata.notifyDismissed`, mirroring `useInstallPrompt`'s shape and its try/catch-around-every-storage-access discipline.
-- [ ] `enable()` must call `Notification.requestPermission()` synchronously inside the click handler's call stack — no `await` before it, or Safari drops the user gesture.
-- [ ] `src/components/NotifyPrompt.tsx` — the card. Two states, per spec §6.2. Reuse the `.install*` CSS class language with `.notify*` equivalents; add `IcBell` / `IcBellOff` to `icons.tsx` in the existing style.
-- [ ] `src/components/PeopleSheet.tsx` — a "This device" section above the people list holding the permanent toggle. It is device state, not person state, so it does not belong in a person's row.
-- [ ] `src/App.tsx` — render `<NotifyPrompt />` next to `<InstallPrompt />`. In `handleGateSubmit`, after `signIn(clean)`, fire-and-forget a rebind of any existing subscription to the new name (`.catch(() => {})`, exactly like the neighbouring `db.logLogin`). In `handleSignOut`, unsubscribe and delete the row before clearing the name.
-- [ ] `src/lib/push.test.ts` — `urlBase64ToUint8Array` round-trips a known key; the capability matrix returns the right state with `serviceWorker` absent, `PushManager` absent, iOS-not-standalone, and `Notification.permission === "denied"`.
+- [x] `src/lib/db.ts` — `savePushSubscription(sub, userName, deviceId)` and `deletePushSubscription(endpoint)`. Save is an `insert`, falling back to an `update ... eq("endpoint")` when the insert returns `23505`; **not** `.upsert()`, which needs table-wide select privilege. Both follow the module's existing `fail(context, error)` convention, and neither chains `.select()` (§Global Constraints).
+- [x] `src/hooks/usePushNotifications.ts` — exposes `{ supported, needsHomeScreen, permission, enabled, busy, enable, disable }`, plus `dismissed`/`dismiss` against `localStorage` key `khata.notifyDismissed`, mirroring `useInstallPrompt`'s shape and its try/catch-around-every-storage-access discipline.
+- [x] `enable()` must call `Notification.requestPermission()` synchronously inside the click handler's call stack — no `await` before it, or Safari drops the user gesture.
+- [x] `src/components/NotifyPrompt.tsx` — the card. Two states, per spec §6.2. Reuse the `.install*` CSS class language with `.notify*` equivalents; add `IcBell` / `IcBellOff` to `icons.tsx` in the existing style.
+- [x] `src/components/PeopleSheet.tsx` — a "This device" section above the people list holding the permanent toggle. It is device state, not person state, so it does not belong in a person's row.
+- [x] `src/App.tsx` — render `<NotifyPrompt />` next to `<InstallPrompt />`. In `handleGateSubmit`, after `signIn(clean)`, fire-and-forget a rebind of any existing subscription to the new name (`.catch(() => {})`, exactly like the neighbouring `db.logLogin`). In `handleSignOut`, unsubscribe and delete the row before clearing the name.
+- [x] `src/lib/push.test.ts` — 15 cases: `urlBase64ToUint8Array` decodes a 65-byte P-256 point, restores stripped padding and translates the url-safe alphabet; the capability matrix with `serviceWorker`/`PushManager`/`Notification` each absent; iPhone tab vs Home Screen, iPadOS-reporting-as-a-Mac vs a real Mac, and Android either way.
+- [x] `src/lib/pushSw.test.ts` — 9 cases running `public/push-sw.js` against a fake `self`: the composed text reaches `showNotification`, the tag survives three sends of a Settle All, `renotify` stays off, an unparseable payload still shows a card, click focuses an already-open window, ignores an unrelated one on the same origin, and otherwise opens the app at its own scope.
 
-**Verify:** `npm run lint && npm run typecheck && npm test && npm run build`. Then `npm run dev` over HTTPS (the repo already allows `.ngrok-free.app` hosts in `vite.config.ts` for exactly this) and confirm a real subscription lands in the table.
+**Verify:** done — lint, typecheck, 326 tests and `npm run build` all clean, and the built `dist/sw.js` was inspected to confirm it carries `importScripts("push-sw.js")` with `dist/push-sw.js` alongside it. Still to do by hand: `npm run dev` over HTTPS (the repo already allows `.ngrok-free.app` hosts for exactly this) to confirm a real subscription lands in the table.
 
 ---
 

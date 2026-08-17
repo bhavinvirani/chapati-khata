@@ -62,6 +62,19 @@ export const IcShare = (p: P) => (
     <path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" />
   </Base>
 );
+export const IcBell = (p: P) => (
+  <Base {...p}>
+    <path d="M18 9a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16S18 14 18 9" />
+    <path d="M13.7 20a2 2 0 0 1-3.4 0" />
+  </Base>
+);
+export const IcBellOff = (p: P) => (
+  <Base {...p}>
+    <path d="M9.4 3.6A6 6 0 0 1 18 9c0 1.9.3 3.3.7 4.3M6.3 6.3A6 6 0 0 0 6 9c0 5-2 6.5-2 6.5h12.5" />
+    <path d="M13.7 20a2 2 0 0 1-3.4 0" />
+    <path d="M3 3l18 18" />
+  </Base>
+);
 export const IcPeople = (p: P) => (
   <Base {...p}>
     <path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1" />

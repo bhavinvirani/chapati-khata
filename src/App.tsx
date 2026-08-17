@@ -2,6 +2,7 @@ import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import type { Entry, WeekView } from "./types";
 import type { ShareInput } from "./lib/split";
 import * as db from "./lib/db";
+import * as push from "./lib/push";
 import { getDeviceId } from "./lib/device";
 import { asAdd, describeAdd, describeEdit } from "./lib/logtext";
 import { cap, dayLabel, money, normalizeName, round2, todayStr, weekIdOf } from "./lib/util";
@@ -13,6 +14,7 @@ import {
 } from "./lib/splitwise";
 import { perPerson } from "./lib/aggregate";
 import { useAuth } from "./hooks/useAuth";
+import { usePushNotifications } from "./hooks/usePushNotifications";
 import { useKhataData } from "./hooks/useKhataData";
 import { useToast } from "./hooks/useToast";
 import { useConfirm } from "./hooks/useConfirm";
@@ -22,6 +24,7 @@ import { Header } from "./components/Header";
 import { TabSwitcher } from "./components/TabSwitcher";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { InstallPrompt } from "./components/InstallPrompt";
+import { NotifyPrompt } from "./components/NotifyPrompt";
 import { ToPayCard } from "./components/ToPayCard";
 import { AddForm } from "./components/AddForm";
 import { WeekCard } from "./components/WeekCard";
@@ -101,6 +104,10 @@ export default function App() {
   const pushPayerRef = useRef<string | null>(null);
 
   const device = useMemo(() => getDeviceId(), []);
+
+  // Owned here rather than inside each consumer, so the banner and the People
+  // sheet's toggle are never two views of two different states.
+  const notify = usePushNotifications(user, device);
 
   // ── action helpers ──
 
@@ -290,6 +297,10 @@ export default function App() {
   }
 
   function handleSignOut() {
+    // Hand the phone on clean: leaving the subscription in place would keep
+    // notifying under the departing person's name, and skip the next person
+    // as if they were them.
+    notify.disable().catch(() => {});
     signOut();
     setTab("ledger");
   }
@@ -349,6 +360,13 @@ export default function App() {
       }
       signIn(clean);
       db.logLogin(clean, device).catch(() => {});
+      // Point any subscription this device already has at whoever just signed
+      // in. Quiet like logLogin above: a phone that cannot reach the database
+      // must still get through the gate.
+      push
+        .currentSubscription()
+        .then((sub) => sub && db.rebindPushSubscription(sub.endpoint, clean, device))
+        .catch(() => {});
       load();
       return null;
     };
@@ -384,6 +402,21 @@ export default function App() {
         {offline && <OfflineBanner onRetry={load} />}
 
         <InstallPrompt />
+
+        <NotifyPrompt
+          show={notify.showBanner}
+          needsHomeScreen={notify.needsHomeScreen}
+          busy={notify.busy}
+          onEnable={() => {
+            notify.enable().then((ok) => {
+              if (ok) flash("Notifications on");
+              else if (Notification.permission === "denied")
+                flash("Notifications blocked. Allow them in your browser settings.");
+              else flash("Could not turn notifications on.");
+            });
+          }}
+          onDismiss={notify.dismiss}
+        />
 
         {tab === "ledger" ? (
           <main className="scroll">
@@ -542,6 +575,7 @@ export default function App() {
           onClose={() => setShowPeople(false)}
           onChanged={load}
           onError={flash}
+          notify={notify}
         />
       )}
 

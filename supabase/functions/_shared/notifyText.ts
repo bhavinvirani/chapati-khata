@@ -1,16 +1,55 @@
-import { cap, dayLabel, weekLabel } from "./util";
-
 // What a push notification says, composed from one log row.
 //
-// Composed from the row's *structured* columns only — actor, action,
+// This lives under supabase/functions/ because the `notify` edge function is
+// its only consumer — Deno cannot import from src/lib (the same constraint
+// that made validate-access hand-duplicate normalizeName). It is deliberately
+// plain TypeScript with no imports and no `Deno.*`, so vitest can import and
+// test it directly from notifyText.test.ts rather than a second copy being
+// kept in step by hand.
+//
+// The date and name helpers below ARE mirrors of src/lib/util.ts. They are
+// pinned by an executable check, not a comment: notifyText.test.ts imports
+// the real util.ts and asserts the two agree across a year of dates.
+//
+// Text is composed from the log row's *structured* columns — actor, action,
 // qty_after, day, week_start — never from `detail`. `detail` is a display
 // string built by logtext.ts and it carries a price ("21 @ $0.50 · bhavin 7"),
-// which would have to be parsed apart to keep money off a lock screen. That
+// which would have to be parsed apart to keep money off a lock screen; that
 // would make logtext.ts's output format silently load-bearing for a second
-// consumer; these columns have types instead.
-//
-// Deliberately no amounts anywhere: notifications land on lock screens, in
-// front of whoever is nearby.
+// consumer. Deliberately no amounts anywhere: notifications land on lock
+// screens, in front of whoever is nearby.
+
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** 'YYYY-MM-DD' at local midnight. Only Y/M/D/day-of-week are ever read back
+ * off it, so the result is the same in vitest's pinned Toronto and in the
+ * edge runtime's UTC. */
+function parseYMD(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** "Wed Aug 12" — mirrors util.ts's dayLabel. */
+function dayLabel(dateStr: string): string {
+  const d = parseYMD(dateStr);
+  return `${DOW[d.getDay()]} ${MON[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** "Aug 10 – 16" or "Jun 29 – Jul 5" — mirrors util.ts's weekLabel for the
+ * Monday–Sunday span a week id names. */
+function weekLabel(weekId: string): string {
+  const mon = parseYMD(weekId);
+  const sun = new Date(mon);
+  sun.setDate(sun.getDate() + 6);
+  if (mon.getMonth() === sun.getMonth()) {
+    return `${MON[mon.getMonth()]} ${mon.getDate()} – ${sun.getDate()}`;
+  }
+  return `${MON[mon.getMonth()]} ${mon.getDate()} – ${MON[sun.getMonth()]} ${sun.getDate()}`;
+}
+
+/** Mirrors util.ts's cap. */
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** The subset of a `LogRow` a notification is built from. */
 export interface NotifiableLog {

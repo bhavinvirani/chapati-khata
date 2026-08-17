@@ -109,6 +109,46 @@ $$;
 revoke execute on function public.notify_push() from public;
 revoke execute on function public.notify_push() from anon, authenticated;
 
+-- ── the bootstrap ──
+-- Writes the two rows notify_push() reads. It exists because the `vault`
+-- schema is not exposed through PostgREST, so the setup wizard cannot write
+-- those rows directly — it hands the values to the `notify` edge function,
+-- which calls this with its service-role client.
+--
+-- Idempotent: re-running `npm run config`, or rotating the secret, updates in
+-- place rather than piling up duplicate names.
+create or replace function public.install_notify_hook(hook_secret text, function_url text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  sid uuid;
+begin
+  select id into sid from vault.secrets where name = 'notify_hook_secret';
+  if sid is null then
+    perform vault.create_secret(hook_secret, 'notify_hook_secret',
+      'Shared secret the logs trigger presents to the notify edge function');
+  else
+    perform vault.update_secret(sid, hook_secret);
+  end if;
+
+  select id into sid from vault.secrets where name = 'notify_function_url';
+  if sid is null then
+    perform vault.create_secret(function_url, 'notify_function_url',
+      'URL of the notify edge function the logs trigger posts to');
+  else
+    perform vault.update_secret(sid, function_url);
+  end if;
+end;
+$$;
+
+-- Only the sender, holding the service-role key, may install the hook.
+revoke execute on function public.install_notify_hook(text, text) from public;
+revoke execute on function public.install_notify_hook(text, text) from anon, authenticated;
+grant execute on function public.install_notify_hook(text, text) to service_role;
+
 -- `create` is a new add, `paid` is a settlement. Edits, deletes, reopens,
 -- Splitwise bookkeeping, logins and people changes stay silent (design §3.3).
 create trigger logs_notify_push

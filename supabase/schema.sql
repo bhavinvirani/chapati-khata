@@ -211,6 +211,40 @@ $notify_push$;
 revoke execute on function public.notify_push() from public;
 revoke execute on function public.notify_push() from anon, authenticated;
 
+-- Writes the two rows notify_push() reads. Exists because the `vault` schema
+-- is not exposed through PostgREST, so the setup wizard hands the values to
+-- the `notify` edge function, which calls this with its service-role client.
+create or replace function public.install_notify_hook(hook_secret text, function_url text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $install_notify_hook$
+declare
+  sid uuid;
+begin
+  select id into sid from vault.secrets where name = 'notify_hook_secret';
+  if sid is null then
+    perform vault.create_secret(hook_secret, 'notify_hook_secret',
+      'Shared secret the logs trigger presents to the notify edge function');
+  else
+    perform vault.update_secret(sid, hook_secret);
+  end if;
+
+  select id into sid from vault.secrets where name = 'notify_function_url';
+  if sid is null then
+    perform vault.create_secret(function_url, 'notify_function_url',
+      'URL of the notify edge function the logs trigger posts to');
+  else
+    perform vault.update_secret(sid, function_url);
+  end if;
+end;
+$install_notify_hook$;
+
+revoke execute on function public.install_notify_hook(text, text) from public;
+revoke execute on function public.install_notify_hook(text, text) from anon, authenticated;
+grant execute on function public.install_notify_hook(text, text) to service_role;
+
 drop trigger if exists logs_notify_push on public.logs;
 create trigger logs_notify_push
   after insert on public.logs

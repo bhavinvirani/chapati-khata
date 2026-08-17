@@ -20,21 +20,21 @@
 - **`supabase/schema.sql` and the migration stay in step.** The migration is the applied artifact; `schema.sql` is the idempotent one-shot for a fresh project. Every change lands in both, in each file's own style (`create table if not exists`, guarded `do $$` blocks).
 - **Secrets never reach argv or git.** The VAPID private key and hook secret go to Supabase through the existing `--env-file` path in `scripts/config/surfaces/supabase.mjs`. Only the _public_ key is ever written to `.env`, a GitHub secret, or the bundle.
 - **Subscription keys stay unreadable to the frontend.** `push_subscriptions` grants `select` on every column _except_ `p256dh` and `auth`. Never chain `.select()` onto a write against that table, and never use `.upsert()` on it — `on conflict do update` requires table-wide select privilege and will fail, correctly.
-- **Prettier formats everything.** `npx prettier --write` on touched files before each commit; `npm run format:check` passes at the end. `supabase/functions/**` is eslint-ignored (`deno lint` owns it) but Prettier still formats it.
+- **Prettier formats everything it owns.** `npx prettier --write` on touched files before each commit; `npm run format:check` passes at the end. `supabase/functions/` is in `.prettierignore` and eslint's ignore list — `deno fmt` and `deno lint` own it — so match the surrounding style there by hand.
 - **iOS is a first-class case, not an afterthought.** Any code path that could ask for notification permission checks "iOS and not standalone" first.
 
 ## File Structure
 
-| File                                              | Responsibility                                                    |
-| ------------------------------------------------- | ----------------------------------------------------------------- |
-| `supabase/migrations/<ts>_push_notifications.sql` | Table, RLS, grants, `pg_net`, `notify_push()`, trigger            |
-| `supabase/functions/notify/index.ts`              | Sender + `install-hook` bootstrap                                 |
-| `public/push-sw.js`                               | `push` and `notificationclick` listeners                          |
-| `src/lib/notifyText.ts`                           | Pure title/body composer (tested reference for the edge function) |
-| `src/lib/push.ts`                                 | Browser-side capability checks, subscribe/unsubscribe, key coding |
-| `src/hooks/usePushNotifications.ts`               | The state the banner and the toggle both render off               |
-| `src/components/NotifyPrompt.tsx`                 | The dismissible opt-in card                                       |
-| `scripts/config/vapid.mjs`                        | Keypair generation with `node:crypto`                             |
+| File                                              | Responsibility                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------ |
+| `supabase/migrations/<ts>_push_notifications.sql` | Table, RLS, grants, `pg_net`, `notify_push()`, trigger             |
+| `supabase/functions/notify/index.ts`              | Sender + `install-hook` bootstrap                                  |
+| `public/push-sw.js`                               | `push` and `notificationclick` listeners                           |
+| `supabase/functions/_shared/notifyText.ts`        | Pure title/body composer — one copy, imported by the edge function |
+| `src/lib/push.ts`                                 | Browser-side capability checks, subscribe/unsubscribe, key coding  |
+| `src/hooks/usePushNotifications.ts`               | The state the banner and the toggle both render off                |
+| `src/components/NotifyPrompt.tsx`                 | The dismissible opt-in card                                        |
+| `scripts/config/vapid.mjs`                        | Keypair generation with `node:crypto`                              |
 
 ---
 
@@ -68,19 +68,33 @@ The trigger and table first — everything else has an opinion about their shape
 
 Pure functions, no I/O, so they come before both consumers.
 
+**Where it lives.** The plan originally put this in `src/lib/` as a tested
+_reference_ for a hand-kept copy inside the edge function, following the
+precedent of `normalizeName` and `normalizeEmail`. That turned out to be
+avoidable: the edge function is the composer's only consumer, and a module
+with no imports and no `Deno.*` can be imported by both Deno and vitest. So
+there is **one** copy, in `supabase/functions/_shared/`, and `vitest.config.ts`
+widens its `include` to reach it — the same widening `scripts/` already got.
+
+Its `cap`/`dayLabel`/`weekLabel` are still mirrors of `src/lib/util.ts`, since
+Deno cannot import from `src`. Those are pinned by an executable check rather
+than a comment: the test imports the real `util.ts` and asserts the two agree
+across every day and every Monday of a year.
+
 **Files:**
 
-- Create: `src/lib/notifyText.ts`, `src/lib/notifyText.test.ts`
+- Create: `supabase/functions/_shared/notifyText.ts`, `supabase/functions/_shared/notifyText.test.ts`
+- Modify: `vitest.config.ts`
 
 **Steps:**
 
-- [ ] Define `NotifiableLog` — the subset of `LogRow` the composer needs: `id`, `actor`, `action`, `qty_after`, `day`, `week_start`.
-- [ ] `notifyText(log): { title: string; body: string; tag: string } | null`. Returns `null` for any action outside `create` / `paid`, so the composer — not the caller — owns the list.
+- [x] Define `NotifiableLog` — the subset of `LogRow` the composer needs: `id`, `actor`, `action`, `qty_after`, `day`, `week_start`.
+- [x] `notifyText(log): { title: string; body: string; tag: string } | null`. Returns `null` for any action outside `create` / `paid`, so the composer — not the caller — owns the list.
   - `create` → title `` `${cap(actor)} added ${qty} ${qty === 1 ? "chapati" : "chapatis"}` ``, body the short day label, tag `` `add:${id}` ``.
   - `paid` → title `` `${cap(actor)} settled the khata` ``, body `` `Week of ${label}` ``, tag `` `paid:${actor}` ``.
-- [ ] Reuse `cap` from `src/lib/util.ts`. For the date, reuse `dayLabel` if its format suits; if not, add a local formatter here rather than bending `dayLabel`, which the ledger UI depends on.
-- [ ] Guard the degenerate rows the type allows but the writer never produces: a `create` with `qty_after` null, a `paid` with `week_start` null. Fall back to a bodyless notification rather than rendering `null`.
-- [ ] Tests: singular vs plural, a settle, an excluded action returning `null`, a null `qty_after`, and date formatting under the suite's pinned `America/Toronto`.
+- [x] Mirror `cap`, `dayLabel` and `weekLabel` from `src/lib/util.ts` locally, and pin them with a test that imports the originals and compares over a year of dates.
+- [x] Guard the degenerate rows the type allows but the writer never produces: a `create` with `qty_after` null, a `paid` with `week_start` null. Fall back to a bodyless notification rather than rendering `null`.
+- [x] Tests: singular vs plural, a settle, thirteen excluded actions returning `null`, a null `qty_after`/`day`/`week_start`, a blank actor, tag collapsing for a Settle All, tag separation between people, no currency anywhere, and the drift checks above. 27 in all.
 
 **Verify:** `npm test`
 
@@ -95,19 +109,19 @@ Pure functions, no I/O, so they come before both consumers.
 
 **Steps:**
 
-- [ ] Copy `.npmrc` and the shape of `deno.json` from `supabase/functions/splitwise/`. Add `"@negrel/webpush": "jsr:@negrel/webpush@^0.4"` to the import map — pin the major, and confirm the resolved version on JSR at implementation time rather than trusting this line.
-- [ ] Register the function in `supabase/config.toml` with `enabled = true`, `verify_jwt = false`, its `import_map` and `entrypoint`, matching the `validate-access` block.
-- [ ] In `index.ts`: reject non-`POST`. Read `NOTIFY_HOOK_SECRET`; if unset, `500` with `{ error: "config" }`. Compare it to the `x-khata-hook` header with a constant-time-ish equality (compare byte arrays of equal padded length, not `===` on the raw strings); mismatch → bare `401`.
-- [ ] Branch on `body.action === "install-hook"`: write `notify_hook_secret` (the same secret) and `notify_function_url` (from the body) into Vault via `vault.create_secret`, upserting by name so re-running is idempotent. Use a service-role `createClient` — the same pattern `validate-access` uses to reach `users`. Return `{ ok: true }`.
-- [ ] Default branch — the hook. Parse `body.log`. Run it through the text composer; a `null` result means nothing to send, return `{ ok: true, sent: 0 }`.
-- [ ] **Hand-mirror `src/lib/notifyText.ts` into this file**, with the same "keep the two in step by hand" comment `validate-access`'s `normalizeName` and `splitwise`'s `normalizeEmail` already carry. Deno cannot import from `src/lib`; this is the project's established answer to that, and it must be flagged the same way.
-- [ ] Load subscriptions with the service-role client: `select * from push_subscriptions where user_name <> log.actor`.
-- [ ] Import the VAPID keys (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) once per invocation and build the application server. Send to every subscription **concurrently** via `Promise.allSettled` — a slow push service must not serialise the fan-out.
-- [ ] The payload is JSON: `{ title, body, tag, url }`. Keep it well under 4 KB.
-- [ ] On a `404` or `410` response, delete that `endpoint` row. Any other failure: `console.error` and move on. Never throw out of the handler — the trigger has already forgotten about this request, so a 500 helps nobody.
-- [ ] Return `{ ok: true, sent, pruned }`.
+- [x] Copy `.npmrc` and the shape of `deno.json` from `supabase/functions/splitwise/`. Pinned `jsr:@negrel/webpush@^0.5` — 0.5.0 is the version in the library's own `deno.json` on master, and its API was read from source: `importVapidKeys({publicKey, privateKey}: JWKs)`, `ApplicationServer.new({contactInformation, vapidKeys})`, `.subscribe({endpoint, keys})`, `.pushTextMessage(text, {ttl})`, and a `PushMessageError` carrying `.response`.
+- [x] Register the function in `supabase/config.toml` with `enabled = true`, `verify_jwt = false`, its `import_map` and `entrypoint`, matching the `validate-access` block.
+- [x] In `index.ts`: wrap in `withSupabase({ auth: "none" }, …)` — the documented shape for a signed webhook, and the only one that works for a caller with no Supabase credentials. Reject non-`POST`. Read `NOTIFY_HOOK_SECRET`; if unset, `500` with `{ error: "config" }`. Compare it to the `x-khata-hook` header by SHA-256 digest and an XOR-accumulating loop, so neither content nor length leaks through timing; mismatch → bare `401`.
+- [x] Branch on `body.action === "install-hook"`: call `ctx.supabaseAdmin.rpc("install_notify_hook", …)`. PostgREST does not expose the `vault` schema, so the Vault writing lives in a `security definer` function added to the migration and granted to `service_role` alone; it creates each secret or updates it in place, so re-running the wizard and rotating the secret are both safe.
+- [x] Default branch — the hook. Parse `body.log`. Run it through the text composer; a `null` result means nothing to send, return `{ ok: true, sent: 0 }`.
+- [x] Import the composer from `../_shared/notifyText.ts` — a relative import, exactly as `rateLimit.ts` is imported. No hand-mirroring (see Task 2).
+- [x] Load subscriptions with the service-role client: `select * from push_subscriptions where user_name <> log.actor`.
+- [x] Import the VAPID keys once per invocation and build the application server. The library stores a keypair as **JWK**, so this is one secret, `VAPID_KEYS`, holding `{publicKey, privateKey}` — not two base64url strings — plus `VAPID_SUBJECT`. Send to every subscription **concurrently** via `Promise.allSettled` — a slow push service must not serialise the fan-out.
+- [x] The payload is JSON: `{ title, body, tag }`. No `url` — the service worker derives it from its own registration scope, which is one less thing to configure per deployment. Well under 4 KB.
+- [x] On a `404` or `410` response, delete that `endpoint` row. Any other failure: `console.error` and move on. Never throw out of the handler — the trigger has already forgotten about this request, so a 500 helps nobody.
+- [x] Return `{ ok: true, sent, pruned }`.
 
-**Verify:** `deno check supabase/functions/notify/index.ts` if the CLI is available; otherwise deploy to a Supabase branch and `curl` it with and without the header.
+**Verify:** `deno check` needs `jsr.io`, which this environment cannot reach, so the file was parse-checked with esbuild and its composer covered by the 27 vitest cases. The `install_notify_hook` half is covered by the SQL harness (permission denied for `authenticated`, both rows written, re-run does not duplicate, rotation replaces in place). The send path itself is only proven by Task 6.
 
 ---
 

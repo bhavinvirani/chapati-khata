@@ -10,3 +10,13 @@ entrypoint = "./functions/validate-access/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/validate-access/*.html" ]
+
+# The push sender. Called by Postgres (the logs_notify_push trigger, through
+# pg_net), which has no JWT to present — so the platform check is off and the
+# x-khata-hook shared secret is the function's own gate. See the "External
+# webhooks" pattern in Supabase's Securing Edge Functions guide.
+[functions.notify]
+enabled = true
+verify_jwt = false
+import_map = "./functions/notify/deno.json"
+entrypoint = "./functions/notify/index.ts"

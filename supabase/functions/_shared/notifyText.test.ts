@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { notifyText } from "./notifyText";
-import type { NotifiableLog } from "./notifyText";
+import { notifyText } from "./notifyText.ts";
+import type { NotifiableLog } from "./notifyText.ts";
+// The real thing the date helpers in notifyText.ts mirror. Importing it here
+// is what turns "keep these in step by hand" into a check that fails.
+import { cap, dayLabel, weekLabel } from "../../../src/lib/util";
 
 const row = (over: Partial<NotifiableLog> = {}): NotifiableLog => ({
   id: "log-1",
@@ -93,6 +96,39 @@ describe("notifyText", () => {
     it("falls back to Someone for a blank actor", () => {
       expect(notifyText(row({ actor: "" }))?.title).toBe("Someone added 21 chapatis");
       expect(notifyText(row({ actor: "   " }))?.title).toBe("Someone added 21 chapatis");
+    });
+  });
+
+  // Deno cannot import src/lib, so this module carries its own copies of
+  // util.ts's cap/dayLabel/weekLabel. These are the checks that stop the two
+  // drifting: every date the app can produce, run through both.
+  describe("stays in step with src/lib/util.ts", () => {
+    const everyDayOfAYear = Array.from({ length: 366 }, (_, i) => {
+      const d = new Date(2026, 0, 1 + i);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    });
+
+    it("formats every day of a year exactly as dayLabel does", () => {
+      for (const day of everyDayOfAYear) {
+        expect(notifyText(row({ day }))?.body).toBe(dayLabel(day));
+      }
+    });
+
+    it("formats every week of a year exactly as weekLabel does", () => {
+      // Mondays only — the week ids weekIdOf produces. Covers the same-month
+      // and cross-month spans, and the year boundary.
+      const mondays = everyDayOfAYear.filter((d) => new Date(`${d}T00:00:00`).getDay() === 1);
+      expect(mondays.length).toBeGreaterThan(50);
+      for (const week_start of mondays) {
+        expect(notifyText(row({ action: "paid", week_start }))?.body).toBe(weekLabel(week_start));
+      }
+    });
+
+    it("capitalises names exactly as cap does", () => {
+      for (const actor of ["deven", "bhavin", "samir", "a", "mary-jane", "élodie"]) {
+        expect(notifyText(row({ actor }))?.title).toBe(`${cap(actor)} added 21 chapatis`);
+      }
     });
   });
 });

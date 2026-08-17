@@ -218,10 +218,19 @@ behaviour it has today. `public/push-sw.js` is also matched by the existing
 
 ### 3.9 The public key ships in the bundle
 
-Subscribing needs the VAPID **public** key in the browser. It is public by
+Subscribing needs the VAPID **public** key in the browser, as the raw
+uncompressed P-256 point (`0x04 || x || y`, base64url) that
+`pushManager.subscribe` calls `applicationServerKey`. It is public by
 definition — the same category as `VITE_SUPABASE_ANON_KEY` — so it is a
 build-time `VITE_VAPID_PUBLIC_KEY` rather than a round trip to the edge
-function. The private key exists only as a Supabase edge-function secret.
+function.
+
+The sender needs the keypair in a different shape: `@negrel/webpush` imports
+and exports VAPID keys as **JWK**. So the private half never exists as its own
+setting — there is one Supabase secret, `VAPID_KEYS`, holding
+`{"publicKey": {…JWK}, "privateKey": {…JWK}}`, and the browser's
+`VITE_VAPID_PUBLIC_KEY` is derived from the public JWK's `x` and `y` when the
+keypair is generated (§3.11).
 
 ### 3.10 The hook secret lives in Vault
 
@@ -236,12 +245,24 @@ The URL is in Vault rather than hardcoded in the migration because it contains
 the project ref, and this repo is meant to be forked and pointed at somebody
 else's project.
 
-Writing those two Vault rows is the one setup step no CLI covers. `notify`
-therefore accepts a one-off `{"action": "install-hook"}` request, authenticated
-by the same `NOTIFY_HOOK_SECRET` it already holds, and writes both rows with
-its service-role client. `npm run config` calls it after setting the secrets,
-so the whole setup stays inside the wizard (§3.11). The README documents the
-equivalent two lines of SQL for anyone who would rather paste them.
+Writing those two Vault rows is the one setup step no CLI covers, and
+PostgREST does not expose the `vault` schema, so the edge function cannot
+write them directly either. The migration therefore ships
+`public.install_notify_hook(hook_secret, function_url)` — `security definer`,
+execute granted to `service_role` alone — which creates each secret or updates
+it in place. `notify` accepts a one-off `{"action": "install-hook"}` request,
+authenticated by the same `NOTIFY_HOOK_SECRET` it already holds, and calls
+that function with its service-role client. `npm run config` calls it after
+setting the secrets, so the whole setup stays inside the wizard (§3.11). Being
+idempotent, it doubles as the way to rotate the secret later. The README
+documents the equivalent SQL for anyone who would rather paste it.
+
+`notify` itself runs under `withSupabase({ auth: "none" })` — Supabase's
+documented shape for a webhook whose caller has no Supabase credentials to
+present. `auth: "none"` skips only the SDK's credential check; the
+`x-khata-hook` comparison is then the function's entire authentication, so it
+runs before anything else touches the body, and compares SHA-256 digests so
+neither the secret's content nor its length leaks through timing.
 
 ### 3.11 Setup goes through `npm run config`
 

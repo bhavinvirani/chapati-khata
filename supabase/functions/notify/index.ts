@@ -10,6 +10,12 @@ import type { NotifiableLog } from "../_shared/notifyText.ts";
 //
 // The only holder of the VAPID private key, exactly as `splitwise` is the only
 // holder of the Splitwise API key.
+//
+// Sending is all it does. Installing the trigger's Vault rows used to live
+// here too, authenticated by the very secret being installed — which could
+// never converge, since a running function still holds the previous one. That
+// now goes straight to `public.install_notify_hook` over PostgREST from
+// `npm run config`, and this function is only ever a recipient.
 
 /** How long a push service should hold an undelivered message. A day: a
  * chapati notification that arrives four weeks late is noise, not news. */
@@ -123,25 +129,6 @@ export default {
       body = await req.json();
     } catch {
       return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
-    }
-
-    // ── one-off bootstrap, called by `npm run config` ──
-    // Writes the two rows the trigger reads. Postgres owns the writing (the
-    // vault schema is not exposed through PostgREST); this just carries the
-    // values in with the service-role client. Idempotent, so re-running the
-    // wizard is safe.
-    if (body.action === "install-hook") {
-      const url = typeof body.url === "string" ? body.url : "";
-      if (!url) return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
-      const { error } = await ctx.supabaseAdmin.rpc("install_notify_hook", {
-        hook_secret: hookSecret,
-        function_url: url,
-      });
-      if (error) {
-        console.error("[notify] install-hook failed", error);
-        return Response.json({ ok: false, error: "install_failed" }, { status: 500 });
-      }
-      return Response.json({ ok: true });
     }
 
     // ── the hook ──

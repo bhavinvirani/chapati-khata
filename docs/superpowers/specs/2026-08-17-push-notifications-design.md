@@ -246,16 +246,29 @@ the project ref, and this repo is meant to be forked and pointed at somebody
 else's project.
 
 Writing those two Vault rows is the one setup step no CLI covers, and
-PostgREST does not expose the `vault` schema, so the edge function cannot
-write them directly either. The migration therefore ships
+PostgREST does not expose the `vault` schema, so nothing outside the database
+can write them directly. The migration therefore ships
 `public.install_notify_hook(hook_secret, function_url)` — `security definer`,
 execute granted to `service_role` alone — which creates each secret or updates
-it in place. `notify` accepts a one-off `{"action": "install-hook"}` request,
-authenticated by the same `NOTIFY_HOOK_SECRET` it already holds, and calls
-that function with its service-role client. `npm run config` calls it after
-setting the secrets, so the whole setup stays inside the wizard (§3.11). Being
-idempotent, it doubles as the way to rotate the secret later. The README
-documents the equivalent SQL for anyone who would rather paste it.
+it in place, and doubles as the way to rotate the secret later.
+
+Being an ordinary function in an exposed schema, PostgREST already offers it as
+an RPC, and that is how `npm run config` calls it: with the project's service
+key, which the Supabase CLI hands over on request. The whole setup therefore
+stays inside the wizard, on the first run, with the secret generated and never
+shown to anyone.
+
+**The first design routed this through the `notify` function** — a one-off
+`{"action": "install-hook"}` request authenticated by the same
+`NOTIFY_HOOK_SECRET` the function already held. That cannot converge, and the
+reasoning is worth keeping: the install is authenticated by the very secret
+being installed, so the running function is always one value behind and answers
+`401`. Generating a new secret to retry moves the problem along rather than
+solving it. Setup could only be completed by choosing the secret by hand and
+pasting it into the SQL editor — which also meant the wizard could never offer
+to generate it. Calling the RPC directly takes the edge function out of its own
+bootstrap: no circularity, nothing to propagate first, and it works before the
+function has been deployed at all.
 
 `notify` itself runs under `withSupabase({ auth: "none" })` — Supabase's
 documented shape for a webhook whose caller has no Supabase credentials to
@@ -320,7 +333,7 @@ someone taps Add / Mark paid
 | ------------------------------------------------- | ------ | ------------------------------------------------------------------ |
 | `supabase/migrations/<ts>_push_notifications.sql` | new    | table, RLS + grants, `pg_net`, `notify_push()`, trigger            |
 | `supabase/schema.sql`                             | edit   | same, in the idempotent one-shot form this file keeps              |
-| `supabase/functions/notify/index.ts`              | new    | the sender, plus the `install-hook` bootstrap                      |
+| `supabase/functions/notify/index.ts`              | new    | the sender, and only the sender                                    |
 | `supabase/functions/notify/deno.json`             | new    | import map, mirroring the other two functions                      |
 | `supabase/functions/notify/.npmrc`                | new    | same as the other two                                              |
 | `supabase/config.toml`                            | edit   | register `notify` with `verify_jwt = false`                        |
@@ -341,7 +354,7 @@ someone taps Add / Mark paid
 | `scripts/config/registry.mjs`                     | edit   | four settings + wizard step 6                                      |
 | `scripts/config/validate.mjs`                     | edit   | `vapidPublicKey`, `vapidPrivateKey`, `mailtoOrUrl`, `hookSecret`   |
 | `scripts/config/vapid.mjs`                        | new    | keypair generation with `node:crypto`                              |
-| `scripts/config.mjs`                              | edit   | honour `generate()`; call `install-hook` after writing the secrets |
+| `scripts/config.mjs`                              | edit   | honour `generate()`; install the database hook over PostgREST      |
 | `.github/workflows/deploy.yml`                    | edit   | deploy `notify`; pass `VITE_VAPID_PUBLIC_KEY` to the build         |
 | `README.md`                                       | edit   | a Notifications section, incl. the iOS Home Screen requirement     |
 
@@ -401,7 +414,10 @@ event — there is no retry queue, on purpose.
 - `notify` runs with `verify_jwt = false` — the header secret is the whole
   gate, so it is compared with a length-independent equality check and the
   function returns `401` with no body on a mismatch.
-- `install-hook` is guarded by the same secret and is idempotent.
+- `install_notify_hook` is executable by `service_role` only — explicitly
+  revoked from `anon` and `authenticated`, so the anon key that ships in the
+  browser cannot point the trigger anywhere. It is idempotent, which makes it
+  the rotation path as well as the install path.
 - Subscription keys are unreadable with the anon key (§3.7). The worst a
   holder of the anon key can do is insert a subscription of their own or
   delete one whose endpoint they already know.
@@ -430,7 +446,7 @@ guard passes untouched.
 
 Until the secrets are set, `notify_push()` finds no Vault rows and returns
 immediately: the app on `main` behaves exactly as it does today. Setting the
-secrets and running `install-hook` is what switches it on, and it can be
+secrets and installing the hook is what switches it on, and it can be
 switched back off by deleting the two Vault rows.
 
 ## 10. Known limitations

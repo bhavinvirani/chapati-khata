@@ -410,7 +410,9 @@ export default function App() {
           onEnable={() => {
             notify.enable().then((ok) => {
               if (ok) flash("Notifications on");
-              else if (Notification.permission === "denied")
+              // Through push.permission(), not `Notification.permission`: the
+              // global does not exist at all in an iOS Safari tab.
+              else if (push.permission() === "denied")
                 flash("Notifications blocked. Allow them in your browser settings.");
               else flash("Could not turn notifications on.");
             });

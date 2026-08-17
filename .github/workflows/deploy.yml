@@ -104,6 +104,9 @@ jobs:
       - name: Deploy Splitwise function
         if: steps.check.outputs.ready == 'true'
         run: supabase functions deploy splitwise --use-api --yes
+      - name: Deploy notify function
+        if: steps.check.outputs.ready == 'true'
+        run: supabase functions deploy notify --use-api --yes
 
   build:
     needs: supabase-deploy
@@ -122,6 +125,11 @@ jobs:
           # Public by design; injected at build time from repo secrets.
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # Public by design too — it identifies the app to the push services.
+          # Deliberately absent from the secrets gate above: a deployment that
+          # has not set up notifications must keep building and shipping, just
+          # without the opt-in appearing.
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
         run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

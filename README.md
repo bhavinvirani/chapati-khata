@@ -238,6 +238,79 @@ Notes:
 
 ---
 
+## Optional: Push notifications
+
+When someone logs an add or settles a week, everyone else's phone gets a
+notification - even with the app closed. Nobody has to remember to tell the
+group. Skip this section entirely if you don't want it; everything else works
+the same without it.
+
+What it does and doesn't do:
+
+- Fires on a **new add** and on **Mark paid / Settle all**. Not on edits,
+  deletes, reopens, Splitwise pushes, or sign-ins - fixing one typo should not
+  buzz five phones.
+- **Skips whoever did it.** You never get told about your own add.
+- Shows names and counts, never money: _"Deven added 21 chapatis"_,
+  _"Bhavin settled the khata"_. Notifications land on lock screens, in front of
+  whoever is nearby.
+- It's **per device**, not per person. Turning it on for your phone doesn't
+  turn it on for your laptop.
+
+### Read this first if your group uses iPhones
+
+Apple gives web apps push notifications **only from the Home Screen**. In a
+Safari tab there is no way to ask - the switch does nothing at all, on any
+version. So on an iPhone or iPad each person has to Share -> **Add to Home
+Screen** first, open the app from that icon, and turn notifications on there.
+The app says so rather than offering a button that cannot work. Android and
+desktop have no such requirement.
+
+### Setting it up
+
+1. **Generate the keys.** Run `npm run config`, pick **VAPID public key**, and
+   accept the offer to generate a keypair. That one step writes four things:
+   the public key to `.env` and to your GitHub repo secrets (it's public, like
+   the anon key), and the signing keypair to Supabase where only the `notify`
+   function can read it. Then do the same for **Notification hook secret**,
+   and set **Notification contact** to a `mailto:` address the push services
+   can reach you at if something misbehaves (it is never shown to your group).
+2. **Deploy.** Push to `main`. The workflow applies the migration and deploys
+   the `notify` function.
+3. **Tell the database where to send things.** Re-run `npm run config` and
+   re-enter the hook secret once the function is deployed - it hands the
+   secret and the function's URL to `notify`, which stores both in Supabase
+   Vault for the database trigger to read. If that step can't reach the
+   function, do it by hand in the SQL editor instead:
+   ```sql
+   select public.install_notify_hook(
+     '<the hook secret>',
+     'https://<project-ref>.supabase.co/functions/v1/notify'
+   );
+   ```
+4. **Turn it on, per device.** Open the app and use the "Get told when
+   something changes" card, or the switch at the top of the People sheet.
+
+### Notes
+
+- **Turning the whole thing off** for the group: delete the two Vault rows.
+  ```sql
+  delete from vault.secrets where name in ('notify_hook_secret', 'notify_function_url');
+  ```
+  The trigger then finds nothing and stays quiet. Nothing else changes, and no
+  ledger write is ever affected either way - a broken or absent notification
+  setup can never stop someone logging chapatis.
+- **Turning it off for yourself**: the switch in the People sheet, or your
+  phone's own notification settings for the app.
+- **Signing out unsubscribes that device**, so handing your phone to someone
+  else doesn't leave them getting your notifications.
+- **Settling several weeks at once** produces one notification, not one per
+  week - they share a tag, so the newest replaces the rest.
+- Subscriptions clean themselves up: when a phone unsubscribes or clears its
+  browser data, the next send gets told it's gone and drops the row.
+
+---
+
 ## Step 5 - Keep the database awake
 
 A free Supabase project pauses after about 7 idle days. This repo includes a
@@ -267,20 +340,25 @@ anything.
 - **Supabase** (hosted Postgres + Edge Functions) for shared, durable storage,
   realtime updates, and the two server-side checks that must never run in the
   browser (the login code, and the Splitwise API key).
-- Seven tables - `weeks`, `entries`, `entry_shares`, `users`, `settlements`,
-  `rate_limit_attempts`, `logs`. An add's cost is split per person into
+- Eight tables - `weeks`, `entries`, `entry_shares`, `users`, `settlements`,
+  `rate_limit_attempts`, `push_subscriptions`, `logs`. An add's cost is split per person into
   `entry_shares`; a `settlement` groups whichever weeks were paid together in
   one click and is the unit a Splitwise push covers. See
   [`supabase/schema.sql`](supabase/schema.sql) for a fresh install, or
   [`supabase/migrations/`](supabase/migrations/) for the schema's history.
 - All database access is isolated in [`src/lib/db.ts`](src/lib/db.ts). Swap backends
   by rewriting one file.
-- Two edge functions in [`supabase/functions/`](supabase/functions/):
+- Three edge functions in [`supabase/functions/`](supabase/functions/):
   `validate-access` (checks the sign-in code + name server-side, rate-limited
-  by IP) and `splitwise` (the only thing that holds the Splitwise API key -
+  by IP), `splitwise` (the only thing that holds the Splitwise API key -
   proxies linking a person, pushing an expense, and deleting one on reopen;
-  also rate-limited). Both share the throttling logic in
+  also rate-limited), and `notify` (the only thing that holds the VAPID
+  signing key - sends a push to every subscribed device except the actor's).
+  The first two share the throttling logic in
   [`supabase/functions/_shared/rateLimit.ts`](supabase/functions/_shared/rateLimit.ts).
+- Notifications are fired by the database, not by the app: a trigger on `logs`
+  posts the new row to `notify` through `pg_net`. So a phone that loses signal
+  right after saving still gets everyone else told.
 
 ```
 scripts/config.mjs        # interactive setup + config editor
@@ -289,6 +367,7 @@ src/
   types.ts                # shared TypeScript types
   hooks/
     useAuth.ts            # sign-in / sign-out state
+    usePushNotifications.ts # notification permission + subscription state
     useKhataData.ts       # data loading, realtime, derived state
     useToast.ts           # toast notifications
     useConfirm.ts         # confirmation dialog state
@@ -296,6 +375,8 @@ src/
     supabase.ts           # client + anonymous-auth gate
     db.ts                 # every read/write + realtime subscription
     device.ts             # random per-device breadcrumb for the log
+    platform.ts           # iOS / installed-to-home-screen detection
+    push.ts               # notification permission, subscribe, unsubscribe
     util.ts               # money, dates, week math, input parsing
     split.ts              # per-person allocation math for one add
     aggregate.ts          # turning stored rows into what the UI shows
@@ -319,6 +400,7 @@ src/
     StatsSheet.tsx          # lifetime stats
     LogView.tsx             # change history with pagination
     ConfirmDialog.tsx       # confirmation modal
+    NotifyPrompt.tsx        # the "turn on notifications" card
     BootScreen.tsx          # loading screen
     OfflineBanner.tsx       # offline warning
     Toast.tsx               # toast notification
@@ -332,8 +414,12 @@ supabase/
   functions/
     validate-access/      # server-side sign-in check, rate-limited
     splitwise/             # link/push/delete proxy — the only holder of the API key, rate-limited
+    notify/                # the push sender — the only holder of the VAPID signing key
     _shared/
-      rateLimit.ts          # shared IP-keyed failure-counter used by both functions above
+      rateLimit.ts          # shared IP-keyed failure-counter used by the two above
+      notifyText.ts         # what a notification says, composed from a log row
+public/
+  push-sw.js              # push + notificationclick, imported into the generated worker
 ```
 
 ## A note on the "light gate"

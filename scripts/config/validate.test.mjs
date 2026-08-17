@@ -9,6 +9,10 @@ import {
   groupId,
   supabaseUrl,
   anonKey,
+  contactUri,
+  vapidPublicKey,
+  vapidKeys,
+  hookSecret,
 } from "./validate.mjs";
 
 describe("positiveNumber", () => {
@@ -111,5 +115,90 @@ describe("anonKey", () => {
   });
   it("rejects empty", () => {
     expect(anonKey("").ok).toBe(false);
+  });
+});
+
+describe("contactUri", () => {
+  it.each(["mailto:you@example.com", "https://example.com/khata"])("accepts %j", (raw) => {
+    expect(contactUri(raw).ok).toBe(true);
+  });
+  it.each(["", "you@example.com", "http://example.com", "mailto:nope", "mailto: a@b.c"])(
+    "rejects %j",
+    (raw) => {
+      expect(contactUri(raw).ok).toBe(false);
+    },
+  );
+});
+
+describe("vapidPublicKey", () => {
+  const valid = Buffer.concat([Buffer.from([0x04]), Buffer.alloc(64, 7)]).toString("base64url");
+
+  it("accepts a real uncompressed P-256 point", () => {
+    expect(vapidPublicKey(valid).ok).toBe(true);
+  });
+  it("rejects standard base64, which pushManager.subscribe will not take", () => {
+    const std = Buffer.from(valid, "base64url").toString("base64");
+    expect(vapidPublicKey(std).ok).toBe(false);
+  });
+  it("rejects a key of the wrong length, naming the length it got", () => {
+    const short = Buffer.alloc(32, 4).toString("base64url");
+    expect(vapidPublicKey(short).reason).toMatch(/65 bytes, this one is 32/);
+  });
+  it("rejects a compressed point", () => {
+    const compressed = Buffer.concat([Buffer.from([0x02]), Buffer.alloc(64, 7)]).toString(
+      "base64url",
+    );
+    expect(vapidPublicKey(compressed).reason).toMatch(/0x04/);
+  });
+  it("rejects empty", () => {
+    expect(vapidPublicKey("").ok).toBe(false);
+  });
+});
+
+describe("vapidKeys", () => {
+  const pub = { kty: "EC", crv: "P-256", x: "x", y: "y" };
+  const priv = { ...pub, d: "d" };
+  const pair = JSON.stringify({ publicKey: pub, privateKey: priv });
+
+  it("accepts a generated pair", () => {
+    expect(vapidKeys(pair).ok).toBe(true);
+  });
+  it("normalises whitespace out of the stored JSON", () => {
+    expect(vapidKeys(JSON.stringify({ publicKey: pub, privateKey: priv }, null, 2)).value).toBe(
+      pair,
+    );
+  });
+  it("points at generating rather than typing when it is not JSON", () => {
+    expect(vapidKeys("not json").reason).toMatch(/generate it/);
+  });
+  it("rejects a pair missing one half", () => {
+    expect(vapidKeys(JSON.stringify({ publicKey: pub })).ok).toBe(false);
+  });
+  it("rejects a private key with no d — the sender could not sign", () => {
+    expect(vapidKeys(JSON.stringify({ publicKey: pub, privateKey: pub })).reason).toMatch(/\(d\)/);
+  });
+  it("rejects a public key carrying d, which would ship the secret", () => {
+    expect(vapidKeys(JSON.stringify({ publicKey: priv, privateKey: priv })).ok).toBe(false);
+  });
+  it.each(["RSA", "OKP"])("rejects a %s key", (kty) => {
+    expect(vapidKeys(JSON.stringify({ publicKey: { ...pub, kty }, privateKey: priv })).ok).toBe(
+      false,
+    );
+  });
+  it("rejects the wrong curve", () => {
+    const wrong = { ...pub, crv: "P-384" };
+    expect(vapidKeys(JSON.stringify({ publicKey: wrong, privateKey: priv })).ok).toBe(false);
+  });
+});
+
+describe("hookSecret", () => {
+  it("accepts a generated secret", () => {
+    expect(hookSecret("a".repeat(43)).ok).toBe(true);
+  });
+  it("rejects something short enough to guess", () => {
+    expect(hookSecret("hunter2").ok).toBe(false);
+  });
+  it("rejects spaces, which would not survive a header", () => {
+    expect(hookSecret("a secret with spaces here").ok).toBe(false);
   });
 });

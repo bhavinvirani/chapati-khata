@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { sharesAmount } from "./split";
 import type { ShareInput } from "./split";
 import type { SplitwisePerson } from "./splitwise";
+import type { PushKeys } from "./push";
 import type { Entry, LogAction, LogRow, Settlement, User, Week } from "../types";
 import { cap, money, normalizeName } from "./util";
 import { SPLITWISE_CATEGORY_NAME, SPLITWISE_CURRENCY } from "../config";
@@ -604,6 +605,68 @@ export async function pushSettlement(
   }
 
   return { ok: true, expenseId: data.expense_id };
+}
+
+// ── push notifications ──
+
+/**
+ * Record (or refresh) this device's push subscription.
+ *
+ * An insert with a fallback update, rather than `.upsert()`: PostgREST's
+ * upsert compiles to `on conflict do update`, which Postgres only allows with
+ * table-wide select privilege — and this table deliberately withholds select
+ * on `p256dh`/`auth` so the anon key cannot read the key material for
+ * messaging everyone's phones. `23505` is the unique violation on `endpoint`,
+ * i.e. this device is already known: the same device re-subscribing, or a
+ * different person signing in on it.
+ */
+export async function savePushSubscription(
+  sub: PushKeys,
+  userName: string,
+  deviceId: string,
+): Promise<void> {
+  const row = {
+    endpoint: sub.endpoint,
+    p256dh: sub.p256dh,
+    auth: sub.auth,
+    user_name: userName,
+    device_id: deviceId,
+    last_seen_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("push_subscriptions").insert(row);
+  if (!error) return;
+  if (error.code !== "23505") fail("savePushSubscription/insert", error);
+
+  const { error: upErr } = await supabase
+    .from("push_subscriptions")
+    .update(row)
+    .eq("endpoint", sub.endpoint);
+  if (upErr) fail("savePushSubscription/update", upErr);
+}
+
+/**
+ * Point an existing subscription at whoever just signed in on this device.
+ *
+ * This is the only thing keeping "skip the actor" honest when a phone changes
+ * hands: without it the new person would be skipped under the old person's
+ * name, and notified about their own adds.
+ */
+export async function rebindPushSubscription(
+  endpoint: string,
+  userName: string,
+  deviceId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .update({ user_name: userName, device_id: deviceId, last_seen_at: new Date().toISOString() })
+    .eq("endpoint", endpoint);
+  if (error) fail("rebindPushSubscription", error);
+}
+
+/** Forget a device. The browser has already unsubscribed by this point. */
+export async function deletePushSubscription(endpoint: string): Promise<void> {
+  const { error } = await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+  if (error) fail("deletePushSubscription", error);
 }
 
 // ── realtime ──

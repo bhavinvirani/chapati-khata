@@ -41,6 +41,14 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        // Adds the `push` and `notificationclick` listeners to the worker
+        // this plugin generates. `workbox` is passed through to
+        // workbox-build's generateSW verbatim, so this is the supported way
+        // to extend the generated worker without taking over authorship of
+        // it — `injectManifest` would mean hand-writing the precache and the
+        // font caching below. Resolved relative to the worker, so it lands
+        // under the GitHub Pages sub-path on its own.
+        importScripts: ["push-sw.js"],
         // Google Fonts are cross-origin, so they are not precached with the
         // app shell — cache them at runtime so the installed app keeps its
         // typography offline after the first load.

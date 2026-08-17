@@ -4,9 +4,9 @@ import { SURFACES } from "./surfaces/index.mjs";
 import { GROUPS } from "../config.mjs";
 
 describe("registry integrity", () => {
-  it("has eleven settings and fourteen targets", () => {
-    expect(SETTINGS).toHaveLength(11);
-    expect(SETTINGS.flatMap((s) => s.targets)).toHaveLength(14);
+  it("has fifteen settings and nineteen targets", () => {
+    expect(SETTINGS).toHaveLength(15);
+    expect(SETTINGS.flatMap((s) => s.targets)).toHaveLength(19);
   });
 
   it("gives every setting a unique id", () => {
@@ -55,10 +55,42 @@ describe("registry integrity", () => {
     }
   });
 
-  it("assigns every setting to a declared wizard step", () => {
+  it("assigns every setting the wizard asks for to a declared step", () => {
     const steps = new Set(WIZARD_STEPS.map((w) => w.n));
-    for (const s of SETTINGS) {
+    for (const s of SETTINGS.filter((s) => s.wizard)) {
       expect(steps.has(s.wizard.step), s.id).toBe(true);
+    }
+  });
+
+  it("only lets a setting skip the wizard when something else fills it", () => {
+    // `wizard: null` means the wizard never prompts for it — which is only
+    // honest if some other setting's generator writes it.
+    const generated = new Set(
+      SETTINGS.filter((s) => s.generate).flatMap((s) => Object.keys(s.generate.run())),
+    );
+    for (const s of SETTINGS.filter((s) => s.wizard === null)) {
+      expect(generated.has(s.id), s.id).toBe(true);
+    }
+  });
+
+  it("has a runnable generator that only names real settings", () => {
+    for (const s of SETTINGS.filter((s) => s.generate)) {
+      expect(s.generate.label, s.id).toBeTruthy();
+      const produced = s.generate.run();
+      expect(Object.keys(produced).length, s.id).toBeGreaterThan(0);
+      for (const [id, value] of Object.entries(produced)) {
+        const target = settingById(id);
+        expect(target, `${s.id} -> ${id}`).toBeTruthy();
+        // A generator that ever emitted something its own validator rejects
+        // would only surface when a notification failed to arrive.
+        expect(target.validate(value).ok, `${s.id} -> ${id}`).toBe(true);
+      }
+    }
+  });
+
+  it("generates its own value, so the prompt it replaces is really covered", () => {
+    for (const s of SETTINGS.filter((s) => s.generate)) {
+      expect(Object.keys(s.generate.run()), s.id).toContain(s.id);
     }
   });
 
@@ -74,7 +106,14 @@ describe("registry integrity", () => {
       SETTINGS.filter((s) => s.secret)
         .map((s) => s.id)
         .sort(),
-    ).toEqual(["entry-code", "splitwise-api-key", "supabase-access-token", "supabase-db-password"]);
+    ).toEqual([
+      "entry-code",
+      "notify-hook-secret",
+      "splitwise-api-key",
+      "supabase-access-token",
+      "supabase-db-password",
+      "vapid-keys",
+    ]);
   });
 
   it("looks settings up by id", () => {

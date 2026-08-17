@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { isIos, isStandalone } from "../lib/platform";
 
 // The event Chromium fires when the app meets the installability criteria.
 // Not in the DOM lib types yet, so it's declared here.
@@ -8,22 +9,6 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const DISMISS_KEY = "khata.installDismissed";
-
-function isStandalone(): boolean {
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    // iOS Safari exposes standalone here instead of via display-mode.
-    (window.navigator as unknown as { standalone?: boolean }).standalone === true
-  );
-}
-
-function isIos(): boolean {
-  const ua = window.navigator.userAgent;
-  const iDevice = /iphone|ipad|ipod/i.test(ua);
-  // iPadOS 13+ reports as a Mac; distinguish by touch support.
-  const iPadOs = /macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
-  return iDevice || iPadOs;
-}
 
 function wasDismissed(): boolean {
   try {

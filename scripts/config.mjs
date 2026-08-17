@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { SETTINGS, WIZARD_STEPS } from "./config/registry.mjs";
+import { SETTINGS, WIZARD_STEPS, settingById } from "./config/registry.mjs";
 import { SURFACES, EFFECT_TEXT } from "./config/surfaces/index.mjs";
 import { isPlatformManaged } from "./config/surfaces/supabase.mjs";
 import { envSurface } from "./config/surfaces/github.mjs";
@@ -226,9 +226,89 @@ async function applyToTargets(setting, value) {
   return results.every((r) => r.ok);
 }
 
+/**
+ * Tell the database the hook secret, and where to send it.
+ *
+ * The trigger reads both from Vault, which no CLI reaches and PostgREST does
+ * not expose — so the deployed notify function is asked to write them, using
+ * the same secret we have just set as its own proof of who is asking. Failing
+ * here is a warning, not a stop: the README carries the one line of SQL that
+ * does the same thing.
+ */
+export async function installNotifyHook(secret) {
+  const { value: url } = await SURFACES.dotenv.read("VITE_SUPABASE_URL");
+  if (!url) {
+    console.log(`  ${yellow("⚠ can't reach the notify function — set the Supabase URL first")}`);
+    return false;
+  }
+  const endpoint = `${url.replace(/\/+$/, "")}/functions/v1/notify`;
+
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-khata-hook": secret },
+      body: JSON.stringify({ action: "install-hook", url: endpoint }),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (err) {
+    console.log(`  ${yellow(`⚠ could not reach ${endpoint} — ${err.message}`)}`);
+    console.log(`    ${dim("Deploy the notify function, then re-run this setting.")}`);
+    return false;
+  }
+
+  if (!res.ok) {
+    // 401 is the one worth naming: it means the function is running with a
+    // different secret than the one just written, i.e. it needs redeploying.
+    const why =
+      res.status === 401
+        ? "the deployed function still has the old secret — redeploy it, then re-run this setting"
+        : `HTTP ${res.status}`;
+    console.log(`  ${yellow(`⚠ the notify function refused the hook — ${why}`)}`);
+    return false;
+  }
+
+  console.log(`  ${green("✓")} ${"database hook".padEnd(24)} installed`);
+  return true;
+}
+
+/**
+ * Offer to make a value that exists nowhere to be looked up.
+ *
+ * A VAPID keypair and a shared secret are generated, not obtained, and one
+ * generation can fill more than one setting — the keypair yields both the
+ * browser's public key and the sender's JWK pair, which are two settings
+ * holding two shapes of the same thing. So this applies every id the
+ * generator returns, validating each through its own validator on the way:
+ * a generator that ever produced something malformed should fail here, not
+ * silently on somebody's phone.
+ */
+async function offerGenerate(setting, unset) {
+  if (!(await confirm(`  ${setting.generate.label}?`, { default: unset }))) return null;
+
+  const produced = setting.generate.run();
+  let value = null;
+  for (const [id, raw] of Object.entries(produced)) {
+    const target = settingById(id);
+    if (!target) throw new Error(`generator returned an unknown setting id: ${id}`);
+    const checked = target.validate(raw);
+    if (!checked.ok) throw new Error(`generated ${target.label} is invalid: ${checked.reason}`);
+    if (target !== setting) console.log(`\n  ${bold(target.label)} ${dim("(generated with it)")}`);
+    await applyToTargets(target, checked.value);
+    if (target.installHook) await installNotifyHook(checked.value);
+    if (target === setting) value = checked.value;
+  }
+  return { changed: true, value };
+}
+
 export async function editSetting(setting, { unset = false } = {}) {
   console.log(`\n${bold(setting.label)}`);
   console.log(`  ${dim(setting.help)}`);
+
+  if (setting.generate) {
+    const generated = await offerGenerate(setting, unset);
+    if (generated) return generated;
+  }
 
   if (setting.obtain) {
     console.log(`  ${dim(setting.obtain.instructions)}`);
@@ -249,6 +329,7 @@ export async function editSetting(setting, { unset = false } = {}) {
     return { changed: false };
   }
   await applyToTargets(setting, value);
+  if (setting.installHook) await installNotifyHook(value);
   return { changed: true, value };
 }
 
@@ -377,7 +458,7 @@ async function runWizard() {
   let skipSplitwise = false;
 
   for (const step of WIZARD_STEPS) {
-    const members = SETTINGS.filter((s) => s.wizard.step === step.n);
+    const members = SETTINGS.filter((s) => s.wizard?.step === step.n);
     if (members.length === 0) continue;
 
     console.log(`\n${bold(`Step ${step.n} — ${step.title}`)}`);

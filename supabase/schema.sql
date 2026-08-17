@@ -135,6 +135,129 @@ create index if not exists rate_limit_attempts_lookup_idx on public.rate_limit_a
 alter table public.rate_limit_attempts enable row level security;
 grant select, insert, delete on public.rate_limit_attempts to service_role;
 
+-- ── Push notifications: one row per subscribed browser, plus the trigger that
+-- tells the `notify` edge function to fan a new add or settlement out to
+-- everyone else's phone. Inert until the two Vault secrets at the bottom of
+-- this block exist. ──
+create extension if not exists pg_net;
+
+create table if not exists public.push_subscriptions (
+  endpoint     text primary key,       -- the push service URL; identity of a device
+  p256dh       text not null,          -- client public key    ┐ RFC 8291
+  auth         text not null,          -- client auth secret   ┘ encryption inputs
+  user_name    text not null,          -- the name typed at the gate when it subscribed
+  device_id    text,
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions(user_name);
+alter table public.push_subscriptions enable row level security;
+
+-- Same "authed all" policy shape as every other table here. What differs is
+-- the grant: on this table the confidentiality boundary is column privileges,
+-- not row visibility. p256dh and auth are the key material for messaging
+-- somebody's phone and the anon key ships in the frontend, so `select *` is
+-- refused by Postgres before RLS is consulted. The sender reads them with the
+-- service-role key, which bypasses RLS, exactly as rate_limit_attempts is.
+drop policy if exists "authed all - push_subscriptions" on public.push_subscriptions;
+create policy "authed all - push_subscriptions" on public.push_subscriptions for all to authenticated using (true) with check (true);
+
+grant insert, update, delete on public.push_subscriptions to authenticated;
+grant select (endpoint, user_name, device_id, created_at, last_seen_at)
+  on public.push_subscriptions to authenticated;
+
+create or replace function public.notify_push()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $notify_push$
+declare
+  hook_secret text;
+  fn_url      text;
+begin
+  select decrypted_secret into hook_secret
+    from vault.decrypted_secrets where name = 'notify_hook_secret';
+  select decrypted_secret into fn_url
+    from vault.decrypted_secrets where name = 'notify_function_url';
+
+  -- Not configured for push yet. Silence, not an error.
+  if hook_secret is null or fn_url is null then
+    return null;
+  end if;
+
+  -- Fire-and-forget: net.http_post only queues a row for pg_net's background
+  -- worker, so the enclosing insert never waits on a push service.
+  perform net.http_post(
+    url := fn_url,
+    body := jsonb_build_object('log', to_jsonb(new)),
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-khata-hook', hook_secret
+    ),
+    timeout_milliseconds := 5000
+  );
+
+  return null;
+exception
+  -- A notification is a nicety; the log row it hangs off is the record.
+  -- Anything that goes wrong in here must degrade to silence rather than
+  -- abort the insert and stop somebody logging chapatis.
+  when others then
+    return null;
+end;
+$notify_push$;
+
+revoke execute on function public.notify_push() from public;
+revoke execute on function public.notify_push() from anon, authenticated;
+
+-- Writes the two rows notify_push() reads. Exists because the `vault` schema
+-- is not exposed through PostgREST, so the setup wizard hands the values to
+-- the `notify` edge function, which calls this with its service-role client.
+create or replace function public.install_notify_hook(hook_secret text, function_url text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $install_notify_hook$
+declare
+  sid uuid;
+begin
+  select id into sid from vault.secrets where name = 'notify_hook_secret';
+  if sid is null then
+    perform vault.create_secret(hook_secret, 'notify_hook_secret',
+      'Shared secret the logs trigger presents to the notify edge function');
+  else
+    perform vault.update_secret(sid, hook_secret);
+  end if;
+
+  select id into sid from vault.secrets where name = 'notify_function_url';
+  if sid is null then
+    perform vault.create_secret(function_url, 'notify_function_url',
+      'URL of the notify edge function the logs trigger posts to');
+  else
+    perform vault.update_secret(sid, function_url);
+  end if;
+end;
+$install_notify_hook$;
+
+revoke execute on function public.install_notify_hook(text, text) from public;
+revoke execute on function public.install_notify_hook(text, text) from anon, authenticated;
+grant execute on function public.install_notify_hook(text, text) to service_role;
+
+drop trigger if exists logs_notify_push on public.logs;
+create trigger logs_notify_push
+  after insert on public.logs
+  for each row
+  when (new.action in ('create', 'paid'))
+  execute function public.notify_push();
+
+-- The two secrets the trigger reads. Set them once, either through
+-- `npm run config` or by hand:
+--   select vault.create_secret('<random string>', 'notify_hook_secret');
+--   select vault.create_secret('https://<ref>.supabase.co/functions/v1/notify', 'notify_function_url');
+-- Deleting both rows turns push notifications off without touching this schema.
+
 -- ── Realtime so every device sees changes instantly ──
 -- Guarded because `alter publication ... add table` has no `if not exists`
 -- form and errors ("already member of publication") on a second run.

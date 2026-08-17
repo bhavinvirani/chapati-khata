@@ -32,6 +32,12 @@ function sampleFor(setting) {
     "splitwise-currency": "CAD",
     "splitwise-category": "Groceries",
     "splitwise-group-id": "123",
+    // A real uncompressed P-256 point, since vapidPublicKey decodes rather
+    // than pattern-matches and "value" would read as misconfigured.
+    "vapid-public-key": Buffer.concat([Buffer.from([0x04]), Buffer.alloc(64, 7)]).toString(
+      "base64url",
+    ),
+    "vapid-subject": "mailto:you@example.com",
   };
   return samples[setting.id] ?? "value";
 }
@@ -108,8 +114,9 @@ describe("printStatus summary", () => {
     const out = capture(() =>
       printStatus({ probes: probeMap, states: statesFor(probeMap), strays: [] }),
     );
-    // 2 Splitwise settings hidden with the group + entry-code half-read.
-    expect(out).toContain("nothing disagrees — 3 settings not checked");
+    // Hidden with the surface: 2 Splitwise settings and the 3 Supabase-only
+    // notification ones. Plus entry-code, half-read across .env and Supabase.
+    expect(out).toContain("nothing disagrees — 6 settings not checked");
   });
 
   it("still leads with real issues rather than the not-checked line", () => {
@@ -200,7 +207,7 @@ describe("stillMissing", () => {
 
   it("names every required setting when nothing is configured", () => {
     const missing = stillMissing(report({}));
-    const required = SETTINGS.filter((s) => s.wizard.required).map((s) => s.id);
+    const required = SETTINGS.filter((s) => s.wizard?.required).map((s) => s.id);
     expect(missing.map((m) => m.setting.id).sort()).toEqual(required.sort());
     expect(missing.every((m) => m.reason)).toBe(true);
   });

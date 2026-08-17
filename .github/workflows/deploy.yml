@@ -97,16 +97,16 @@ jobs:
         if: steps.check.outputs.ready == 'true'
         run: supabase db push --linked --yes
       - name: Deploy edge functions
+        # All three in one invocation, not a step each. Back-to-back deploys
+        # race: the API rejected the third with "Function was deployed
+        # concurrently by another request" (409) the first time notify was
+        # added, failing the whole ship for no real reason. One command lets
+        # the CLI sequence them.
+        #
         # --use-api bundles server-side instead of via Docker — faster, and
         # removes a Docker dependency from CI. Idempotent redeploy either way.
         if: steps.check.outputs.ready == 'true'
-        run: supabase functions deploy validate-access --use-api --yes
-      - name: Deploy Splitwise function
-        if: steps.check.outputs.ready == 'true'
-        run: supabase functions deploy splitwise --use-api --yes
-      - name: Deploy notify function
-        if: steps.check.outputs.ready == 'true'
-        run: supabase functions deploy notify --use-api --yes
+        run: supabase functions deploy validate-access splitwise notify --use-api --yes
 
   build:
     needs: supabase-deploy

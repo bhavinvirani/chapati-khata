@@ -19,7 +19,7 @@
 - **Migrations are additive.** No `drop`, no `truncate`, no `delete from`, no column type change — so `ci.yml`'s destructive-migration guard needs no `-- allow-destructive` escape hatch. Filename must match `<14-digit-timestamp>_name.sql`.
 - **`supabase/schema.sql` and the migration stay in step.** The migration is the applied artifact; `schema.sql` is the idempotent one-shot for a fresh project. Every change lands in both, in each file's own style (`create table if not exists`, guarded `do $$` blocks).
 - **Secrets never reach argv or git.** The VAPID private key and hook secret go to Supabase through the existing `--env-file` path in `scripts/config/surfaces/supabase.mjs`. Only the _public_ key is ever written to `.env`, a GitHub secret, or the bundle.
-- **Subscription keys stay unreadable to the frontend.** No `select` RLS policy on `push_subscriptions`; only a column-level `grant select (endpoint)`. Never chain `.select()` onto a write against that table — it will fail, correctly.
+- **Subscription keys stay unreadable to the frontend.** `push_subscriptions` grants `select` on every column _except_ `p256dh` and `auth`. Never chain `.select()` onto a write against that table, and never use `.upsert()` on it — `on conflict do update` requires table-wide select privilege and will fail, correctly.
 - **Prettier formats everything.** `npx prettier --write` on touched files before each commit; `npm run format:check` passes at the end. `supabase/functions/**` is eslint-ignored (`deno lint` owns it) but Prettier still formats it.
 - **iOS is a first-class case, not an afterthought.** Any code path that could ask for notification permission checks "iOS and not standalone" first.
 
@@ -49,18 +49,18 @@ The trigger and table first — everything else has an opinion about their shape
 
 **Steps:**
 
-- [ ] `create extension if not exists pg_net with schema extensions;`
-- [ ] Create `public.push_subscriptions` per spec §3.6: `endpoint text primary key`, `p256dh`, `auth`, `user_name` (all `not null`), `device_id`, `created_at`, `last_seen_at`. Index on `user_name`.
-- [ ] Enable RLS. Create three policies for `authenticated` — `for insert with check (true)`, `for update using (true) with check (true)`, `for delete using (true)`. **Create no `select` policy.**
-- [ ] `grant insert, update, delete on public.push_subscriptions to authenticated;` and `grant select (endpoint) on public.push_subscriptions to authenticated;` — the column grant is what lets Postgres evaluate `where endpoint = $1` in an upsert conflict target or a delete without exposing the keys.
-- [ ] Write `public.notify_push()` — `language plpgsql`, `security definer`, `set search_path = public, extensions, vault`. Body: read `notify_hook_secret` and `notify_function_url` from `vault.decrypted_secrets`; `return null` if either is missing; otherwise `perform net.http_post(url, headers => jsonb with 'Content-Type' and 'x-khata-hook', body => jsonb_build_object('log', to_jsonb(new)), timeout_milliseconds => 5000)`; `return null`.
-- [ ] Wrap that whole body in `exception when others then return null;`. Add a comment saying why in one sentence — this is the single most important line in the migration.
-- [ ] `revoke execute on function public.notify_push() from public, anon, authenticated;` — a `security definer` function that can read Vault must not be callable directly.
-- [ ] `create trigger logs_notify_push after insert on public.logs for each row when (new.action in ('create','paid')) execute function public.notify_push();`
-- [ ] Mirror all of it into `supabase/schema.sql` in that file's idempotent style: `if not exists` on the table and index, `drop policy if exists` before each `create policy` (matching the existing block), `create or replace function`, and a `drop trigger if exists` before the `create trigger`.
-- [ ] Verify the filename matches `^[0-9]{14}_[a-zA-Z0-9_]+\.sql$` and that `grep -v '^[[:space:]]*--' <file> | grep -iE 'drop table|drop column|truncate|delete from'` finds nothing.
+- [x] `create extension if not exists pg_net;` — pg_net is not relocatable and creates its own `net` schema, so no `with schema` clause.
+- [x] Create `public.push_subscriptions` per spec §3.6: `endpoint text primary key`, `p256dh`, `auth`, `user_name` (all `not null`), `device_id`, `created_at`, `last_seen_at`. Index on `user_name`.
+- [x] Enable RLS with the project's usual `for all to authenticated using (true) with check (true)` policy. Confidentiality comes from the grant, not from row visibility — omitting the `select` policy makes rows unlocatable for `update`/`delete ... where endpoint = ?`, which silently breaks unsubscribing.
+- [x] `grant insert, update, delete on public.push_subscriptions to authenticated;` and `grant select (endpoint, user_name, device_id, created_at, last_seen_at) on public.push_subscriptions to authenticated;` — every column except `p256dh` and `auth`, so `select *` is refused by Postgres before RLS is consulted.
+- [x] Write `public.notify_push()` — `language plpgsql`, `security definer`, `set search_path = ''` with every reference schema-qualified. Body: read `notify_hook_secret` and `notify_function_url` from `vault.decrypted_secrets`; `return null` if either is missing; otherwise `perform net.http_post(url, headers => jsonb with 'Content-Type' and 'x-khata-hook', body => jsonb_build_object('log', to_jsonb(new)), timeout_milliseconds => 5000)`; `return null`.
+- [x] Wrap that whole body in `exception when others then return null;`. Add a comment saying why in one sentence — this is the single most important line in the migration.
+- [x] `revoke execute on function public.notify_push() from public, anon, authenticated;` — a `security definer` function that can read Vault must not be callable directly.
+- [x] `create trigger logs_notify_push after insert on public.logs for each row when (new.action in ('create','paid')) execute function public.notify_push();`
+- [x] Mirror all of it into `supabase/schema.sql` in that file's idempotent style: `if not exists` on the table and index, `drop policy if exists` before each `create policy` (matching the existing block), `create or replace function`, and a `drop trigger if exists` before the `create trigger`.
+- [x] Verify the filename matches `^[0-9]{14}_[a-zA-Z0-9_]+\.sql$` and that `grep -v '^[[:space:]]*--' <file> | grep -iE 'drop table|drop column|truncate|delete from'` finds nothing.
 
-**Verify:** `supabase db push --linked --dry-run` previews cleanly (or, without CLI access, the SQL runs in the Supabase SQL editor against a branch).
+**Verify:** done against a scratch Postgres 16 with `vault`, `net.http_post` and `public.logs` stubbed — 24 assertions covering: the migration applies clean; the write lands with no Vault rows, with `net.http_post` raising, with the `net` schema dropped, and with the `vault` schema dropped; `create`/`paid` fire and ten other actions do not; the posted body carries the whole log row and the hook header; a session can subscribe, rebind and unsubscribe; `select *`/`p256dh`/`auth` and a direct `notify_push()` call are refused; `service_role` reads the keys and prunes.
 
 ---
 
@@ -129,7 +129,7 @@ Pure functions, no I/O, so they come before both consumers.
   - `needsHomeScreen()` — iOS and not standalone. Reuse the detection already written in `src/hooks/useInstallPrompt.ts` by lifting `isIos`/`isStandalone` into this module and importing them there, rather than writing a second copy.
   - `urlBase64ToUint8Array(base64)` — the standard VAPID key decoder.
   - `getSubscription()`, `subscribe()`, `unsubscribe()` over `navigator.serviceWorker.ready`.
-- [ ] `src/lib/db.ts` — `savePushSubscription(sub, userName, deviceId)` upserting on `endpoint`, and `deletePushSubscription(endpoint)`. Both follow the module's existing `fail(context, error)` convention. **Neither chains `.select()`** (§Global Constraints).
+- [ ] `src/lib/db.ts` — `savePushSubscription(sub, userName, deviceId)` and `deletePushSubscription(endpoint)`. Save is an `insert`, falling back to an `update ... eq("endpoint")` when the insert returns `23505`; **not** `.upsert()`, which needs table-wide select privilege. Both follow the module's existing `fail(context, error)` convention, and neither chains `.select()` (§Global Constraints).
 - [ ] `src/hooks/usePushNotifications.ts` — exposes `{ supported, needsHomeScreen, permission, enabled, busy, enable, disable }`, plus `dismissed`/`dismiss` against `localStorage` key `khata.notifyDismissed`, mirroring `useInstallPrompt`'s shape and its try/catch-around-every-storage-access discipline.
 - [ ] `enable()` must call `Notification.requestPermission()` synchronously inside the click handler's call stack — no `await` before it, or Safari drops the user gesture.
 - [ ] `src/components/NotifyPrompt.tsx` — the card. Two states, per spec §6.2. Reuse the `.install*` CSS class language with `.notify*` equivalents; add `IcBell` / `IcBellOff` to `icons.tsx` in the existing style.

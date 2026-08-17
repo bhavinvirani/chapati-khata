@@ -158,18 +158,39 @@ identity of a subscription, and it makes re-subscribing an idempotent upsert.
 - **sign out** — unsubscribe in the browser and delete the row, so the next
   person to use that phone does not inherit the previous one's feed.
 
-### 3.7 Subscriptions are write-only to the app
+### 3.7 The keys are hidden by column privileges, not by RLS
 
-Every existing table follows one policy shape — `for all to authenticated
-using (true)`. This table deviates, and the deviation is the point: a
-subscription's `p256dh` and `auth` are the encryption inputs for messages to
-that device, and the anon key ships in the frontend for anyone to read.
+A subscription's `p256dh` and `auth` are the encryption inputs for messages to
+that device, and the anon key ships in the frontend for anyone to read. They
+must not be readable with an ordinary session.
 
-So `authenticated` gets `insert`, `update`, `delete`, and a **column-level**
-`select (endpoint)` — enough to filter its own upsert and delete by endpoint,
-not enough to read anybody's keys. No `select` policy is created, so nothing
-comes back from a read. `service_role` bypasses RLS and is how the sender gets
-the full rows.
+The RLS policy is therefore the **same** `for all to authenticated using
+(true)` shape as every other table, and the confidentiality boundary is the
+grant instead:
+
+```sql
+grant insert, update, delete on public.push_subscriptions to authenticated;
+grant select (endpoint, user_name, device_id, created_at, last_seen_at)
+  on public.push_subscriptions to authenticated;
+```
+
+`select *`, `select p256dh` and `select auth` are then refused by Postgres
+before RLS is even consulted, while everything the client legitimately does
+still works. `service_role` bypasses RLS and reads the full rows, exactly as
+`rate_limit_attempts` is already read.
+
+Two things were tried first and rejected, both because Postgres refuses them,
+not on taste — verified against a scratch Postgres 16 running this migration:
+
+- **Omitting the `select` policy entirely** so rows are invisible. This also
+  makes them unlocatable: `update`/`delete ... where endpoint = ?` matches
+  zero rows and reports success, so a device could neither re-subscribe under
+  a new name nor unsubscribe.
+- **`on conflict (endpoint) do update`** for the re-subscribe. That form
+  requires table-wide `select` privilege, which would hand back the two
+  columns this whole decision exists to hide. So `src/lib/db.ts` inserts and
+  falls back to an `update` on a `23505` unique violation (§6.1) — two
+  statements, both of which work under these grants.
 
 The client never needs to read the table anyway: whether this device is
 subscribed is answered by `registration.pushManager.getSubscription()`, which
@@ -302,6 +323,9 @@ someone taps Add / Mark paid
 
 ### 6.1 Enabling
 
+0. Saving the subscription is an `insert`, falling back to an `update` keyed
+   on `endpoint` when it comes back `23505` (§3.7). The fallback is what makes
+   re-subscribing and rebinding to a new gate name idempotent.
 1. The banner or the People-sheet toggle calls `enable()`.
 2. On iOS and not standalone → do not ask for permission. Show the
    Add-to-Home-Screen step instead (`useInstallPrompt` already knows how to

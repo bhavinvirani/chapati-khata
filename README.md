@@ -268,28 +268,33 @@ desktop have no such requirement.
 
 ### Setting it up
 
-1. **Generate the keys.** Run `npm run config`, pick **VAPID public key**, and
-   accept the offer to generate a keypair. That one step writes four things:
-   the public key to `.env` and to your GitHub repo secrets (it's public, like
-   the anon key), and the signing keypair to Supabase where only the `notify`
-   function can read it. Then do the same for **Notification hook secret**,
-   and set **Notification contact** to a `mailto:` address the push services
-   can reach you at if something misbehaves (it is never shown to your group).
-2. **Deploy.** Push to `main`. The workflow applies the migration and deploys
-   the `notify` function.
-3. **Tell the database where to send things.** Re-run `npm run config` and
-   re-enter the hook secret once the function is deployed - it hands the
-   secret and the function's URL to `notify`, which stores both in Supabase
-   Vault for the database trigger to read. If that step can't reach the
-   function, do it by hand in the SQL editor instead:
-   ```sql
-   select public.install_notify_hook(
-     '<the hook secret>',
-     'https://<project-ref>.supabase.co/functions/v1/notify'
-   );
-   ```
-4. **Turn it on, per device.** Open the app and use the "Get told when
+1. **Generate the keys.** Run `npm run config` and set the three notification
+   settings, accepting the offer to generate a value where it appears:
+   - **VAPID public key** — one generation writes the public key to `.env` and
+     to your GitHub repo secrets (it's public, like the anon key), and the
+     signing keypair to Supabase where only the `notify` function reads it.
+   - **Notification contact** — a `mailto:` address the push services can reach
+     you at if your notifications misbehave. Never shown to your group.
+   - **Notification hook secret** — generate it. The script also installs it
+     into the database for you, so you never need to see it.
+2. **Deploy.** Push to `main`. The workflow applies the migration, deploys the
+   `notify` function, and rebuilds the site with the public key baked in.
+3. **Turn it on, per device.** Open the app and use the "Get told when
    something changes" card, or the switch at the top of the People sheet.
+
+If step 1 reports that it could not install the database hook, it names what to
+run — usually `supabase login` or `supabase link`. Fix that and re-run the
+setting; regenerating is safe, since the script writes both halves together.
+The equivalent by hand, if you would rather:
+
+```sql
+select public.install_notify_hook(
+  '<a long random string>',
+  'https://<project-ref>.supabase.co/functions/v1/notify'
+);
+```
+
+and set the same string as the `NOTIFY_HOOK_SECRET` Supabase secret.
 
 ### Notes
 

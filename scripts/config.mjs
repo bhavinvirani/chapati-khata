@@ -18,6 +18,9 @@ import {
   openUrl,
 } from "./config/prompt.mjs";
 import * as git from "./config/git.mjs";
+import * as supabaseSurface from "./config/surfaces/supabase.mjs";
+import { installFailureHelp, notifyUrl, parseProjectRef, restHeaders } from "./config/hook.mjs";
+import { readFile } from "node:fs/promises";
 
 export const GROUPS = [
   { title: "App settings", surface: "config-file" },
@@ -229,46 +232,56 @@ async function applyToTargets(setting, value) {
 /**
  * Tell the database the hook secret, and where to send it.
  *
- * The trigger reads both from Vault, which no CLI reaches and PostgREST does
- * not expose — so the deployed notify function is asked to write them, using
- * the same secret we have just set as its own proof of who is asking. Failing
- * here is a warning, not a stop: the README carries the one line of SQL that
- * does the same thing.
+ * Straight to `public.install_notify_hook` over PostgREST, with the project's
+ * own service key — not through the `notify` function. Routing it through the
+ * function would authenticate the install with the very secret being
+ * installed, which can never converge: the deployed function still holds the
+ * previous one and answers 401, and generating another just moves the problem
+ * along. See scripts/config/hook.mjs.
+ *
+ * Never fatal. A failure names the command that fixes it, because the
+ * alternative is somebody holding a generated secret they were never shown.
  */
 export async function installNotifyHook(secret) {
-  const { value: url } = await SURFACES.dotenv.read("VITE_SUPABASE_URL");
-  if (!url) {
-    console.log(`  ${yellow("⚠ can't reach the notify function — set the Supabase URL first")}`);
+  const fail = (kind, detail) => {
+    console.log(
+      `  ${yellow(`\u26a0 database hook not installed \u2014 ${installFailureHelp(kind, detail)}`)}`,
+    );
     return false;
+  };
+
+  const { value: url } = await SURFACES.dotenv.read("VITE_SUPABASE_URL");
+  const endpoint = notifyUrl(url);
+  if (!endpoint) return fail("no-url");
+
+  let ref;
+  try {
+    ref = parseProjectRef(await readFile("supabase/config.toml", "utf8"));
+  } catch {
+    ref = null;
   }
-  const endpoint = `${url.replace(/\/+$/, "")}/functions/v1/notify`;
+  if (!ref) return fail("no-ref");
+
+  const key = await supabaseSurface.serviceKey(ref);
+  if (!key) return fail("no-key");
 
   let res;
   try {
-    res = await fetch(endpoint, {
+    res = await fetch(`${url.replace(/\/+$/, "")}/rest/v1/rpc/install_notify_hook`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-khata-hook": secret },
-      body: JSON.stringify({ action: "install-hook", url: endpoint }),
+      headers: restHeaders(key),
+      body: JSON.stringify({ hook_secret: secret, function_url: endpoint }),
       signal: AbortSignal.timeout(15000),
     });
   } catch (err) {
-    console.log(`  ${yellow(`⚠ could not reach ${endpoint} — ${err.message}`)}`);
-    console.log(`    ${dim("Deploy the notify function, then re-run this setting.")}`);
-    return false;
+    return fail("other", err.message);
   }
 
-  if (!res.ok) {
-    // 401 is the one worth naming: it means the function is running with a
-    // different secret than the one just written, i.e. it needs redeploying.
-    const why =
-      res.status === 401
-        ? "the deployed function still has the old secret — redeploy it, then re-run this setting"
-        : `HTTP ${res.status}`;
-    console.log(`  ${yellow(`⚠ the notify function refused the hook — ${why}`)}`);
-    return false;
-  }
+  if (res.status === 404) return fail("not-found");
+  if (res.status === 401 || res.status === 403) return fail("forbidden");
+  if (!res.ok) return fail("other", `HTTP ${res.status}`);
 
-  console.log(`  ${green("✓")} ${"database hook".padEnd(24)} installed`);
+  console.log(`  ${green("\u2713")} ${"database hook".padEnd(24)} installed`);
   return true;
 }
 

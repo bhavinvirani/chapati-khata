@@ -5,6 +5,8 @@ import { writeFile, rm, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { pickServiceKey } from "../hook.mjs";
+
 const run = promisify(execFile);
 
 // Injected by Supabase into every project's function environment. Not ours to
@@ -27,6 +29,31 @@ export function isPlatformManaged(name) {
 export function digestMatches(digest, plaintext) {
   if (!digest) return false;
   return digest === createHash("sha256").update(String(plaintext)).digest("hex");
+}
+
+/**
+ * The project's service key, straight from the CLI the user has already had to
+ * log in to for any of this surface to work.
+ *
+ * Going through the CLI rather than reading an access token ourselves means we
+ * never touch its credential store — which is a keyring on some platforms and
+ * a file on others. Returns null rather than throwing: an install that cannot
+ * find a key reports what to run, it does not crash the wizard.
+ */
+export async function serviceKey(projectRef) {
+  try {
+    const { stdout } = await run("supabase", [
+      "projects",
+      "api-keys",
+      "--project-ref",
+      projectRef,
+      "-o",
+      "json",
+    ]);
+    return pickServiceKey(JSON.parse(stdout));
+  } catch {
+    return null;
+  }
 }
 
 export const id = "supabase";

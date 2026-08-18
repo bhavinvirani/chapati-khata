@@ -104,92 +104,119 @@ async function sendAll(
   return { sent, gone };
 }
 
+/**
+ * Name the configuration that is missing, in the log.
+ *
+ * Every value here is a secret, so none can be echoed — but their *names* are
+ * not secret, and without them a misconfigured function is a 500 with an empty
+ * log and three indistinguishable causes. Say which.
+ */
+function missingConfig(): string[] {
+  return ["NOTIFY_HOOK_SECRET", "VAPID_KEYS", "VAPID_SUBJECT"].filter(
+    (name) => !Deno.env.get(name),
+  );
+}
+
 export default {
   // `none` because the caller is Postgres, which has no Supabase credentials
   // to present — the signed-webhook shape from the Supabase auth guide. The
   // x-khata-hook check below is this function's entire authentication, so it
   // happens before anything else touches the body.
   fetch: withSupabase({ auth: "none" }, async (req, ctx) => {
-    if (req.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
-    }
-
-    const hookSecret = Deno.env.get("NOTIFY_HOOK_SECRET");
-    if (!hookSecret) {
-      // Fail closed, exactly as validate-access does for a missing ENTRY_CODE.
-      return Response.json({ ok: false, error: "config" }, { status: 500 });
-    }
-    if (!(await secretsMatch(req.headers.get("x-khata-hook") ?? "", hookSecret))) {
-      // No body: an unauthenticated caller learns nothing about what this is.
-      return new Response(null, { status: 401 });
-    }
-
-    let body: Record<string, unknown>;
     try {
-      body = await req.json();
-    } catch {
-      return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
-    }
+      if (req.method !== "POST") {
+        return new Response("Method not allowed", { status: 405 });
+      }
 
-    // ── the hook ──
-    const log = body.log as NotifiableLog | undefined;
-    if (!log || typeof log.action !== "string") {
-      return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
-    }
+      const hookSecret = Deno.env.get("NOTIFY_HOOK_SECRET");
+      if (!hookSecret) {
+        // Fail closed, exactly as validate-access does for a missing ENTRY_CODE.
+        console.error(`[notify] not configured — missing: ${missingConfig().join(", ")}`);
+        return Response.json({ ok: false, error: "config" }, { status: 500 });
+      }
+      if (!(await secretsMatch(req.headers.get("x-khata-hook") ?? "", hookSecret))) {
+        // No body: an unauthenticated caller learns nothing about what this is.
+        return new Response(null, { status: 401 });
+      }
 
-    const message = notifyText(log);
-    // The trigger's `when` clause already filters, so this is belt and braces
-    // — but it is also what keeps the two lists honest if one is widened.
-    if (!message) return Response.json({ ok: true, sent: 0, skipped: "not_notifiable" });
+      let body: Record<string, unknown>;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
+      }
 
-    const keys = readVapidKeys();
-    const subject = Deno.env.get("VAPID_SUBJECT");
-    if (!keys || !subject) {
-      return Response.json({ ok: false, error: "config" }, { status: 500 });
-    }
+      // ── the hook ──
+      const log = body.log as NotifiableLog | undefined;
+      if (!log || typeof log.action !== "string") {
+        return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
+      }
 
-    // Everyone except whoever caused this. `user_name` holds the gate name as
-    // normalizeName wrote it, and so does logs.actor, so this compares like
-    // with like.
-    const { data, error } = await ctx.supabaseAdmin
-      .from("push_subscriptions")
-      .select("endpoint, p256dh, auth")
-      .neq("user_name", log.actor);
-    if (error) {
-      console.error("[notify] could not load subscriptions", error);
-      return Response.json({ ok: false, error: "db" }, { status: 500 });
-    }
-    const rows = (data ?? []) as SubscriptionRow[];
-    if (rows.length === 0) return Response.json({ ok: true, sent: 0 });
+      const message = notifyText(log);
+      // The trigger's `when` clause already filters, so this is belt and braces
+      // — but it is also what keeps the two lists honest if one is widened.
+      if (!message) return Response.json({ ok: true, sent: 0, skipped: "not_notifiable" });
 
-    let server: webpush.ApplicationServer;
-    try {
-      server = await webpush.ApplicationServer.new({
-        contactInformation: subject,
-        vapidKeys: await webpush.importVapidKeys(keys, { extractable: false }),
-      });
-    } catch (err) {
-      console.error("[notify] bad VAPID keys", err);
-      return Response.json({ ok: false, error: "config" }, { status: 500 });
-    }
+      const keys = readVapidKeys();
+      const subject = Deno.env.get("VAPID_SUBJECT");
+      if (!keys || !subject) {
+        const missing = missingConfig();
+        // VAPID_KEYS can be present but unparseable, which `missing` cannot see.
+        if (!keys && !missing.includes("VAPID_KEYS")) missing.push("VAPID_KEYS (not valid JSON)");
+        console.error(`[notify] not configured — missing: ${missing.join(", ")}`);
+        return Response.json({ ok: false, error: "config" }, { status: 500 });
+      }
 
-    const payload = JSON.stringify({
-      title: message.title,
-      body: message.body,
-      tag: message.tag,
-    });
-    const { sent, gone } = await sendAll(server, rows, payload);
-
-    if (gone.length > 0) {
-      const { error: pruneErr } = await ctx.supabaseAdmin
+      // Everyone except whoever caused this. `user_name` holds the gate name as
+      // normalizeName wrote it, and so does logs.actor, so this compares like
+      // with like.
+      const { data, error } = await ctx.supabaseAdmin
         .from("push_subscriptions")
-        .delete()
-        .in("endpoint", gone);
-      // A failed prune is harmless: the next send hits the same 410 and tries
-      // again. Worth a line in the log, not worth failing the request.
-      if (pruneErr) console.error("[notify] could not prune dead endpoints", pruneErr);
-    }
+        .select("endpoint, p256dh, auth")
+        .neq("user_name", log.actor);
+      if (error) {
+        console.error("[notify] could not load subscriptions", error);
+        return Response.json({ ok: false, error: "db" }, { status: 500 });
+      }
+      const rows = (data ?? []) as SubscriptionRow[];
+      if (rows.length === 0) return Response.json({ ok: true, sent: 0 });
 
-    return Response.json({ ok: true, sent, pruned: gone.length });
+      let server: webpush.ApplicationServer;
+      try {
+        server = await webpush.ApplicationServer.new({
+          contactInformation: subject,
+          vapidKeys: await webpush.importVapidKeys(keys, { extractable: false }),
+        });
+      } catch (err) {
+        console.error("[notify] bad VAPID keys", err);
+        return Response.json({ ok: false, error: "config" }, { status: 500 });
+      }
+
+      const payload = JSON.stringify({
+        title: message.title,
+        body: message.body,
+        tag: message.tag,
+      });
+      const { sent, gone } = await sendAll(server, rows, payload);
+
+      if (gone.length > 0) {
+        const { error: pruneErr } = await ctx.supabaseAdmin
+          .from("push_subscriptions")
+          .delete()
+          .in("endpoint", gone);
+        // A failed prune is harmless: the next send hits the same 410 and tries
+        // again. Worth a line in the log, not worth failing the request.
+        if (pruneErr) console.error("[notify] could not prune dead endpoints", pruneErr);
+      }
+
+      console.log(`[notify] ${message.tag} → sent ${sent}, pruned ${gone.length}`);
+      return Response.json({ ok: true, sent, pruned: gone.length });
+    } catch (err) {
+      // The platform turns an uncaught throw into a bare 500 with nothing in
+      // this function's own log, which is indistinguishable from a deliberate
+      // one. Catch it so the cause is written down somewhere.
+      console.error("[notify] unhandled error", err);
+      return Response.json({ ok: false, error: "unhandled" }, { status: 500 });
+    }
   }),
 };

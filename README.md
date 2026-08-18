@@ -301,6 +301,10 @@ and set the same string as the `NOTIFY_HOOK_SECRET` Supabase secret.
 
 ### Notes
 
+- **If notifications stop arriving**, the `notify` function's log says why in
+  words: `not configured — missing: VAPID_SUBJECT` names the setting, and any
+  unexpected failure is logged as `unhandled error` with the cause. A
+  successful send logs what it sent and to how many devices.
 - **Turning the whole thing off** for the group: delete the two Vault rows.
   ```sql
   delete from vault.secrets where name in ('notify_hook_secret', 'notify_function_url');

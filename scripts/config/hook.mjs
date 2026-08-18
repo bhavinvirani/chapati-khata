@@ -15,6 +15,26 @@
 // before the function is even deployed.
 
 /**
+ * Is this a real key, or the masked placeholder the API returns by default?
+ *
+ * `GET /v1/projects/{ref}/api-keys` only returns key material when asked with
+ * `reveal=true`; without it, secret values come back obscured. A masked value
+ * still looks like a key to `pickServiceKey`, gets sent, and is rejected —
+ * which surfaced as "the key that was found is not a service key" and sent
+ * someone hunting a permissions problem that did not exist. Catch it here so
+ * the message names the real cause instead.
+ */
+export function looksMasked(key) {
+  const s = String(key ?? "");
+  // Legacy JWTs run to hundreds of characters and new-model keys to dozens;
+  // nothing genuine is this short.
+  if (s.length < 20) return true;
+  // Real keys are base64url plus, for JWTs, dots. Bullets, asterisks and
+  // ellipses only ever come from masking.
+  return !/^[A-Za-z0-9._-]+$/.test(s);
+}
+
+/**
  * Find a key that can call a `service_role`-only RPC, from whatever shape
  * `supabase projects api-keys -o json` returned.
  *
@@ -25,7 +45,13 @@
  */
 export function pickServiceKey(payload) {
   const rows = Array.isArray(payload) ? payload : [];
-  const keyOf = (r) => r?.api_key ?? r?.apiKey ?? r?.key ?? null;
+  const raw = (r) => r?.api_key ?? r?.apiKey ?? r?.key ?? null;
+  // A masked value is worse than none: it would be sent and rejected, and the
+  // rejection reads like a permissions problem.
+  const keyOf = (r) => {
+    const k = raw(r);
+    return k && !looksMasked(k) ? k : null;
+  };
 
   // A legacy service_role key, named exactly that.
   const legacy = rows.find((r) => r?.name === "service_role" && keyOf(r));
@@ -80,7 +106,7 @@ export function installFailureHelp(kind, detail) {
     case "no-ref":
       return "supabase/config.toml has no project_id — run 'supabase link' first";
     case "no-key":
-      return "could not read the project's service key — run 'supabase login', then re-run this setting";
+      return "could not read the project's service key — check you are logged in ('supabase login') and that your Supabase CLI is recent enough to reveal it";
     case "not-found":
       return "the database is missing install_notify_hook — deploy the migration first (push to main)";
     case "forbidden":

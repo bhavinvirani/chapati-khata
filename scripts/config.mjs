@@ -243,16 +243,38 @@ async function applyToTargets(setting, value) {
  * alternative is somebody holding a generated secret they were never shown.
  */
 export async function installNotifyHook(secret) {
-  const fail = (kind, detail) => {
+  let endpointForHelp = null;
+
+  /**
+   * Report why, then offer the way through.
+   *
+   * Without this last step a failure here is a dead end: the secret was
+   * generated and never shown, so the SQL in the README cannot be run either.
+   * Printing it is a real disclosure — a terminal, possibly a scrollback
+   * buffer — so it is offered, never done silently.
+   */
+  const fail = async (kind, detail) => {
     console.log(
       `  ${yellow(`\u26a0 database hook not installed \u2014 ${installFailureHelp(kind, detail)}`)}`,
     );
+    if (!endpointForHelp) return false;
+    console.log(`  ${dim("You can finish this by hand in the Supabase SQL editor.")}`);
+    if (
+      await confirm("  Print the SQL? It shows the secret in your terminal", { default: false })
+    ) {
+      console.log(`\n${dim("-- paste into the SQL editor")}`);
+      console.log(`select public.install_notify_hook(`);
+      console.log(`  '${secret}',`);
+      console.log(`  '${endpointForHelp}'`);
+      console.log(`);\n`);
+    }
     return false;
   };
 
   const { value: url } = await SURFACES.dotenv.read("VITE_SUPABASE_URL");
   const endpoint = notifyUrl(url);
-  if (!endpoint) return fail("no-url");
+  if (!endpoint) return await fail("no-url");
+  endpointForHelp = endpoint;
 
   let ref;
   try {
@@ -260,10 +282,10 @@ export async function installNotifyHook(secret) {
   } catch {
     ref = null;
   }
-  if (!ref) return fail("no-ref");
+  if (!ref) return await fail("no-ref");
 
   const key = await supabaseSurface.serviceKey(ref);
-  if (!key) return fail("no-key");
+  if (!key) return await fail("no-key");
 
   let res;
   try {
@@ -274,12 +296,12 @@ export async function installNotifyHook(secret) {
       signal: AbortSignal.timeout(15000),
     });
   } catch (err) {
-    return fail("other", err.message);
+    return await fail("other", err.message);
   }
 
-  if (res.status === 404) return fail("not-found");
-  if (res.status === 401 || res.status === 403) return fail("forbidden");
-  if (!res.ok) return fail("other", `HTTP ${res.status}`);
+  if (res.status === 404) return await fail("not-found");
+  if (res.status === 401 || res.status === 403) return await fail("forbidden");
+  if (!res.ok) return await fail("other", `HTTP ${res.status}`);
 
   console.log(`  ${green("\u2713")} ${"database hook".padEnd(24)} installed`);
   return true;

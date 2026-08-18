@@ -165,6 +165,11 @@ create policy "authed all - push_subscriptions" on public.push_subscriptions for
 grant insert, update, delete on public.push_subscriptions to authenticated;
 grant select (endpoint, user_name, device_id, created_at, last_seen_at)
   on public.push_subscriptions to authenticated;
+-- The sender reads this table with the service-role key and prunes dead
+-- endpoints. Bypassing RLS is not a table privilege: service_role skips the
+-- policies and still needs its own grant, as users and rate_limit_attempts
+-- above already do. select and delete only — it never writes a subscription.
+grant select, delete on public.push_subscriptions to service_role;
 
 create or replace function public.notify_push()
 returns trigger

@@ -1,0 +1,14 @@
+-- The sender reads push_subscriptions with the service-role key, and deletes
+-- the endpoints a push service reports permanently gone. It could do neither:
+-- every send failed with 42501, "permission denied for table
+-- push_subscriptions", once everything else was correctly configured.
+--
+-- Bypassing RLS is not the same as holding a table privilege. service_role
+-- skips the policies, then still needs a grant like any other role — and this
+-- project revoked the public schema's PUBLIC usage, so that access has to be
+-- said out loud. `users` and `rate_limit_attempts` both already say it; the
+-- migration that added this table did not.
+--
+-- select and delete only. The sender never writes a subscription; the browser
+-- does that for itself.
+grant select, delete on public.push_subscriptions to service_role;

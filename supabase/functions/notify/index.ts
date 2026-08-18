@@ -1,7 +1,7 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import * as webpush from "@negrel/webpush";
-import { notifyText } from "../_shared/notifyText.ts";
+import { notifyText, reminderText } from "../_shared/notifyText.ts";
 import type { NotifiableLog } from "../_shared/notifyText.ts";
 
 // The sender. Postgres calls this once per notifiable log row (see the
@@ -146,13 +146,25 @@ export default {
         return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
       }
 
-      // ── the hook ──
-      const log = body.log as NotifiableLog | undefined;
-      if (!log || typeof log.action !== "string") {
-        return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
+      // ── what to say, and who to leave out ──
+      // Two callers: the logs trigger sends a row and the actor is skipped;
+      // the nightly job sends a reminder, which goes to everybody because
+      // there is nobody to have done it.
+      const reminder = body.reminder as { day?: string } | undefined;
+      let message: ReturnType<typeof notifyText>;
+      let skipActor: string | null = null;
+
+      if (reminder) {
+        message = reminderText(typeof reminder.day === "string" ? reminder.day : null);
+      } else {
+        const log = body.log as NotifiableLog | undefined;
+        if (!log || typeof log.action !== "string") {
+          return Response.json({ ok: false, error: "bad_request" }, { status: 400 });
+        }
+        message = notifyText(log);
+        skipActor = log.actor;
       }
 
-      const message = notifyText(log);
       // The trigger's `when` clause already filters, so this is belt and braces
       // — but it is also what keeps the two lists honest if one is widened.
       if (!message) return Response.json({ ok: true, sent: 0, skipped: "not_notifiable" });
@@ -167,13 +179,13 @@ export default {
         return Response.json({ ok: false, error: "config" }, { status: 500 });
       }
 
-      // Everyone except whoever caused this. `user_name` holds the gate name as
-      // normalizeName wrote it, and so does logs.actor, so this compares like
-      // with like.
-      const { data, error } = await ctx.supabaseAdmin
-        .from("push_subscriptions")
-        .select("endpoint, p256dh, auth")
-        .neq("user_name", log.actor);
+      // Everyone except whoever caused this — or everyone, for a reminder.
+      // `user_name` holds the gate name as normalizeName wrote it, and so does
+      // logs.actor, so this compares like with like.
+      const query = ctx.supabaseAdmin.from("push_subscriptions").select("endpoint, p256dh, auth");
+      const { data, error } = await (skipActor === null
+        ? query
+        : query.neq("user_name", skipActor));
       if (error) {
         console.error("[notify] could not load subscriptions", error);
         return Response.json({ ok: false, error: "db" }, { status: 500 });

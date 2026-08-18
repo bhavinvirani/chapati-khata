@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { notifyText } from "./notifyText.ts";
+import { notifyText, reminderText } from "./notifyText.ts";
 import type { NotifiableLog } from "./notifyText.ts";
 // The real thing the date helpers in notifyText.ts mirror. Importing it here
 // is what turns "keep these in step by hand" into a check that fails.
@@ -96,6 +96,38 @@ describe("notifyText", () => {
     it("falls back to Someone for a blank actor", () => {
       expect(notifyText(row({ actor: "" }))?.title).toBe("Someone added 21 chapatis");
       expect(notifyText(row({ actor: "   " }))?.title).toBe("Someone added 21 chapatis");
+    });
+  });
+
+  describe("reminderText", () => {
+    it("says what is missing, and for which day", () => {
+      expect(reminderText("2026-08-12")).toEqual({
+        title: "No chapatis logged today",
+        body: "Wed Aug 12",
+        tag: "reminder:2026-08-12",
+      });
+    });
+
+    it("carries no money either", () => {
+      const m = reminderText("2026-08-12");
+      expect(`${m.title} ${m.body}`).not.toMatch(/[$£€]|\d+\.\d\d/);
+    });
+
+    it("tags per day, so two firings on one day collapse into one card", () => {
+      expect(reminderText("2026-08-12").tag).toBe(reminderText("2026-08-12").tag);
+      expect(reminderText("2026-08-12").tag).not.toBe(reminderText("2026-08-13").tag);
+    });
+
+    it("still returns something usable with no day", () => {
+      const m = reminderText(null);
+      expect(m.title).toBeTruthy();
+      expect(m.tag).toBeTruthy();
+    });
+
+    it("dates the reminder exactly as dayLabel does", () => {
+      for (const day of ["2026-01-01", "2026-06-15", "2026-12-31"]) {
+        expect(reminderText(day).body).toBe(dayLabel(day));
+      }
     });
   });
 

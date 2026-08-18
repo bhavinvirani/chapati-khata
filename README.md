@@ -299,6 +299,41 @@ select public.install_notify_hook(
 
 and set the same string as the `NOTIFY_HOOK_SECRET` Supabase secret.
 
+### The nightly reminder
+
+At **8:30pm**, on days when nobody has logged anything yet, everyone gets
+_"No chapatis logged today"_. On a day that is already in the book it stays
+silent — the point is a nudge, not a daily buzz people learn to swipe away.
+
+It is a `pg_cron` job in the database rather than a GitHub Action, because the
+secret it needs already lives in Vault and Actions cron is routinely ten or
+more minutes late, which is not what "8:30" means to someone waiting for it.
+The job runs hourly at :30 and the function returns immediately for
+twenty-three of those: `pg_cron` schedules are UTC, and a fixed UTC hour would
+drift by one twice a year when the clocks change. Checking the local hour
+instead fixes itself.
+
+The time and timezone default to 8pm America/Toronto and are overridable
+without a migration:
+
+```sql
+select vault.create_secret('Europe/London', 'notify_reminder_tz');
+select vault.create_secret('19',            'notify_reminder_hour');
+```
+
+The minute comes from the cron schedule, so it is always half past. To move it
+off the half hour, reschedule the job:
+
+```sql
+select cron.schedule('khata-daily-reminder', '0 * * * *', 'select public.notify_reminder()');
+```
+
+To turn just the reminder off, leaving the add/settle notifications alone:
+
+```sql
+select cron.unschedule('khata-daily-reminder');
+```
+
 ### Notes
 
 - **If notifications stop arriving**, the `notify` function's log says why in

@@ -73,6 +73,21 @@ export interface NotifyMessage {
   tag: string;
 }
 
+/**
+ * The nightly nudge, sent only on days nothing has been logged yet.
+ *
+ * No actor, so nobody is skipped — this one goes to every subscribed device.
+ * The tag carries the day, so if it ever fired twice the second replaces the
+ * first rather than stacking.
+ */
+export function reminderText(day: string | null): NotifyMessage {
+  return {
+    title: "No chapatis logged today",
+    body: day ? dayLabel(day) : "",
+    tag: day ? `reminder:${day}` : "reminder",
+  };
+}
+
 /** A blank actor can't happen through the gate, but the column only says `not null`. */
 const who = (actor: string) => (actor.trim() ? cap(actor) : "Someone");
 

@@ -41,19 +41,22 @@ export function digestMatches(digest, plaintext) {
  * find a key reports what to run, it does not crash the wizard.
  */
 export async function serviceKey(projectRef) {
-  try {
-    const { stdout } = await run("supabase", [
-      "projects",
-      "api-keys",
-      "--project-ref",
-      projectRef,
-      "-o",
-      "json",
-    ]);
-    return pickServiceKey(JSON.parse(stdout));
-  } catch {
-    return null;
+  const base = ["projects", "api-keys", "--project-ref", projectRef, "-o", "json"];
+  // `--reveal` first: the Management API masks secret key values unless asked
+  // to reveal them, and a masked value is indistinguishable from a real one
+  // until PostgREST rejects it. Older CLIs do not know the flag, so fall back
+  // — pickServiceKey then rejects whatever masked value comes back, and the
+  // caller reports that rather than a bogus permissions error.
+  for (const args of [["--reveal", ...base], base]) {
+    try {
+      const { stdout } = await run("supabase", args);
+      const key = pickServiceKey(JSON.parse(stdout));
+      if (key) return key;
+    } catch {
+      // Unknown flag, not logged in, no such project — try the next shape.
+    }
   }
+  return null;
 }
 
 export const id = "supabase";

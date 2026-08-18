@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  looksMasked,
   installFailureHelp,
   notifyUrl,
   parseProjectRef,
@@ -7,8 +8,32 @@ import {
   restHeaders,
 } from "./hook.mjs";
 
+describe("looksMasked", () => {
+  it("accepts a real legacy JWT", () => {
+    expect(looksMasked("eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.sig")).toBe(false);
+  });
+
+  it("accepts a real new-model secret key", () => {
+    expect(looksMasked("sb_secret_ZmFrZWtleWZha2VrZXlmYWtla2V5")).toBe(false);
+  });
+
+  it.each([
+    ["bullets", "sb_secret_••••••••••••••••••••"],
+    ["asterisks", "sb_secret_********************"],
+    ["an ellipsis character", "sb_secret_abc…"],
+    ["a short stub", "sb_secret_"],
+    ["nothing at all", ""],
+    ["null", null],
+  ])("rejects %s", (_label, value) => {
+    expect(looksMasked(value)).toBe(true);
+  });
+});
+
 describe("pickServiceKey", () => {
   const JWT = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.sig";
+  // Long enough to pass the masked-value floor, as real keys are.
+  const SECRET = "sb_secret_ZmFrZWtleWZha2VrZXlmYWtl";
+  const PUBLISHABLE = "sb_publishable_ZmFrZWtleWZha2VrZXk";
 
   it("finds a legacy service_role key", () => {
     expect(
@@ -23,34 +48,52 @@ describe("pickServiceKey", () => {
     // The anon key ships in the browser; using it here would fail the RPC
     // with a permission error that reads like a bug in the migration.
     expect(pickServiceKey([{ name: "anon", api_key: "eyJhbm9u.x.y" }])).toBeNull();
-    expect(pickServiceKey([{ name: "publishable", api_key: "sb_publishable_abc" }])).toBeNull();
+    expect(pickServiceKey([{ name: "publishable", api_key: PUBLISHABLE }])).toBeNull();
   });
 
   it("finds a new-model secret key by prefix, whatever it is named", () => {
     expect(
       pickServiceKey([
-        { name: "default", api_key: "sb_publishable_abc" },
-        { name: "automations", api_key: "sb_secret_xyz" },
+        { name: "default", api_key: PUBLISHABLE },
+        { name: "automations", api_key: SECRET },
       ]),
-    ).toBe("sb_secret_xyz");
+    ).toBe(SECRET);
   });
 
   it("prefers the legacy key when a project carries both", () => {
     expect(
       pickServiceKey([
-        { name: "default", api_key: "sb_secret_xyz" },
+        { name: "default", api_key: SECRET },
         { name: "service_role", api_key: JWT },
       ]),
     ).toBe(JWT);
   });
 
   it("falls back to whatever the payload calls a secret", () => {
-    expect(pickServiceKey([{ name: "odd", type: "secret", api_key: "k" }])).toBe("k");
+    expect(pickServiceKey([{ name: "odd", type: "secret", api_key: SECRET }])).toBe(SECRET);
   });
 
   it("reads the field however the CLI spells it", () => {
     expect(pickServiceKey([{ name: "service_role", apiKey: JWT }])).toBe(JWT);
     expect(pickServiceKey([{ name: "service_role", key: JWT }])).toBe(JWT);
+  });
+
+  it("refuses a masked key rather than sending one that will be rejected", () => {
+    // The API masks secret values unless asked to reveal them. Returning the
+    // mask here produced a 403 that read as a permissions problem, sending
+    // someone hunting a bug that did not exist.
+    expect(
+      pickServiceKey([{ name: "service_role", api_key: "sb_secret_••••••••••••••••••••" }]),
+    ).toBeNull();
+  });
+
+  it("still finds a real key alongside a masked one", () => {
+    expect(
+      pickServiceKey([
+        { name: "default", api_key: "sb_secret_••••••••••••••••••••" },
+        { name: "other", api_key: "sb_secret_ZmFrZWtleWZha2VrZXlmYWtl" },
+      ]),
+    ).toBe("sb_secret_ZmFrZWtleWZha2VrZXlmYWtl");
   });
 
   it("returns null rather than throwing on a shape it does not know", () => {

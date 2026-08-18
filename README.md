@@ -283,8 +283,11 @@ desktop have no such requirement.
    something changes" card, or the switch at the top of the People sheet.
 
 If step 1 reports that it could not install the database hook, it names what to
-run — usually `supabase login` or `supabase link`. Fix that and re-run the
-setting; regenerating is safe, since the script writes both halves together.
+run — usually `supabase login` or `supabase link` — and then offers to print
+the SQL that finishes the job by hand, so a generated secret you never saw
+can't leave you stuck. Fix the cause and re-run the setting if you can;
+regenerating is safe, since the script writes both halves together.
+
 The equivalent by hand, if you would rather:
 
 ```sql
